@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zero1.ai/claw-task-service/intent-classification",
+  "title": "Agent Task Intent Classification Schema",
+  "description": "Defines the output format for classifying Agent task messages into intent categories.",
+  "type": "object",
+  "required": ["intents", "confidence", "source"],
+  "properties": {
+    "intents": {
+      "type": "array",
+      "description": "Ordered list of detected intents (primary first). At least one intent required.",
+      "minItems": 1,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "required": ["category", "score"],
+        "properties": {
+          "category": {
+            "type": "string",
+            "description": "Intent category label",
+            "enum": ["coding", "ops", "design", "docs", "testing", "communication"]
+          },
+          "score": {
+            "type": "number",
+            "description": "Confidence score for this category (0-1)",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "sub_category": {
+            "type": "string",
+            "description": "Optional finer-grained sub-category",
+            "enum": [
+              "feature_impl", "bug_fix", "refactor", "review",
+              "deploy", "monitor", "incident", "config",
+              "architecture", "ui_design", "api_design",
+              "readme", "api_docs", "changelog", "spec",
+              "unit_test", "integration_test", "e2e_test", "qa",
+              "coordination", "status_report", "handoff", "discussion"
+            ]
+          },
+          "keywords": {
+            "type": "array",
+            "description": "Matched keywords that triggered this classification",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "confidence": {
+      "type": "number",
+      "description": "Overall classification confidence (0-1)",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "source": {
+      "type": "string",
+      "description": "Classification method used",
+      "enum": ["rule_engine", "llm", "hybrid"]
+    },
+    "ambiguous": {
+      "type": "boolean",
+      "description": "True when top two categories have score difference < 0.15",
+      "default": false
+    },
+    "meta": {
+      "type": "object",
+      "description": "Optional metadata about the classification",
+      "properties": {
+        "processing_time_ms": { "type": "number" },
+        "input_length": { "type": "integer" },
+        "rule_matches": { "type": "integer" }
+      }
+    }
+  }
+}
