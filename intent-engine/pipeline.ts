@@ -29,6 +29,7 @@ import { preprocess } from './preprocessor';
 import { extractEntities } from './entity-extractor';
 import { IntentLRUCache, CacheStats } from './lru-cache';
 import { metrics } from './metrics';
+import { LLMFallbackClassifier, fallbackToRegex } from './llm-fallback';
 
 // ─── Pipeline Configuration ─────────────────────────────────────────
 
@@ -49,6 +50,10 @@ export interface PipelineConfig {
   cacheCapacity: number;
   /** Cache TTL in milliseconds (default 300000 = 5min) */
   cacheTtlMs: number;
+  /** Enable LLM Fallback when regex confidence is below threshold (Phase 3 M6) */
+  enableLLMFallback: boolean;
+  /** LLM Fallback confidence threshold — below this, trigger LLM (default 0.5) */
+  llmFallbackThreshold: number;
 }
 
 const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
@@ -60,6 +65,8 @@ const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
   enableCache: true,
   cacheCapacity: 1000,
   cacheTtlMs: 300_000,
+  enableLLMFallback: false,
+  llmFallbackThreshold: 0.5,
 };
 
 // ─── Pipeline Result ────────────────────────────────────────────────
@@ -78,6 +85,8 @@ export interface PipelineResult extends IntentResult {
   pipelineVersion: string;
   /** Whether this result came from the LRU cache (Phase 3 M1) */
   cacheHit: boolean;
+  /** Whether this result was produced by LLM Fallback (Phase 3 M6) */
+  llmFallbackUsed: boolean;
 }
 
 // ─── Route Mapping ──────────────────────────────────────────────────
@@ -111,6 +120,9 @@ export function getRouteHandler(category: TaskIntentCategory): string {
 
 /** Global LRU cache instance for intent classification (Phase 3 M1) */
 const globalCache = new IntentLRUCache(1000, 300_000);
+
+/** Global LLM Fallback classifier instance (Phase 3 M6) */
+const globalLLMFallback = new LLMFallbackClassifier();
 
 /**
  * Run the full intent classification pipeline on a user message.
@@ -152,6 +164,7 @@ export function classifyIntent(
         contextInfluenced: cached.meta.contextUsed,
         pipelineVersion: '3.0.0',
         cacheHit: true,
+        llmFallbackUsed: cached.meta.source === 'llm',
       };
     }
     // Cache miss
@@ -184,6 +197,7 @@ export function classifyIntent(
     contextInfluenced,
     pipelineVersion: '3.0.0',
     cacheHit: false,
+    llmFallbackUsed: false,
   };
 
   // ═══ Stage 6: Write to LRU Cache ══════════════════════════════
@@ -193,6 +207,88 @@ export function classifyIntent(
 
   // Record metrics for non-cached classification
   metrics.recordClassification(result, false);
+
+  return pipelineResult;
+}
+
+/**
+ * 异步分类管道 — 支持 LLM Fallback (Phase 3 M6)。
+ *
+ * 当 enableLLMFallback 为 true 且正则分类器置信度低于
+ * directExecutionThreshold 时，触发 LLM Fallback 进行二次分类。
+ *
+ * @param text - 用户原始输入文本
+ * @param context - 可选的上下文信息
+ * @param config - 可选的管道配置覆盖
+ * @returns 管道分类结果
+ */
+export async function classifyIntentAsync(
+  text: string,
+  context?: IntentContext,
+  config?: Partial<PipelineConfig>,
+): Promise<PipelineResult> {
+  const cfg = { ...DEFAULT_PIPELINE_CONFIG, ...config };
+
+  // Stage 0: 先走同步管道（含缓存）
+  const pipelineResult = classifyIntent(text, context, config);
+
+  // 如果正则分类器置信度已经足够高，直接返回
+  if (pipelineResult.confidence >= cfg.directExecutionThreshold) {
+    return pipelineResult;
+  }
+
+  // 如果未启用 LLM Fallback，直接返回正则结果
+  if (!cfg.enableLLMFallback) {
+    return pipelineResult;
+  }
+
+  // ═══ LLM Fallback 触发 ═══════════════════════════════════════
+  // 置信度低于 llmFallbackThreshold 且启用了 LLM Fallback
+  if (pipelineResult.confidence < cfg.llmFallbackThreshold) {
+    const request: IntentRequest = {
+      text,
+      context: cfg.enableContext ? context : undefined,
+    };
+
+    // 调用 LLM Fallback 分类器
+    const llmResult = await globalLLMFallback.classify(request);
+
+    if (llmResult) {
+      // LLM 分类成功 — 用 LLM 结果构建 PipelineResult
+      const recommendedAction = getConfidenceAction(llmResult.confidence);
+      const routeHandler = getRouteHandler(llmResult.category);
+
+      const llmPipelineResult: PipelineResult = {
+        ...llmResult,
+        recommendedAction,
+        routeHandler,
+        contextInfluenced: false,
+        pipelineVersion: '3.0.0',
+        cacheHit: false,
+        llmFallbackUsed: true,
+      };
+
+      // 将 LLM 结果写入缓存
+      if (cfg.enableCache) {
+        globalCache.set(text, llmResult);
+      }
+
+      // 记录指标
+      metrics.recordClassification(llmResult, false);
+
+      return llmPipelineResult;
+    }
+
+    // LLM 不可用 — 降级到正则分类器结果
+    const fallbackResult = fallbackToRegex(
+      pipelineResult,
+      'LLM Fallback 不可用或超时',
+    );
+    return {
+      ...fallbackResult,
+      llmFallbackUsed: false,
+    };
+  }
 
   return pipelineResult;
 }
@@ -310,6 +406,7 @@ export function debugPipeline(text: string, context?: IntentContext): {
     classification,
     routeHandler: classification.routeHandler,
     entities: classification.entities,
+    llmFallbackUsed: classification.llmFallbackUsed,
   };
 }
 
@@ -329,4 +426,6 @@ export {
   applyContextBoost,
 } from './disambiguation';
 export { RULES, getRulesByPriority, getRuleStats } from './patterns';
+export { LLMFallbackClassifier, fallbackToRegex, classifyWithLLM, llmFallback } from './llm-fallback';
+export type { LLMFallbackConfig } from './llm-fallback';
 export * from './types';
