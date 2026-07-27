@@ -15,7 +15,7 @@
  *   LOG_LEVEL=DEBUG|INFO|WARN|ERROR  (default: INFO)
  *
  * Usage:
- *   import { logger } from './logger';
+ *   import { logger } from './logger.js';
  *   logger.info('Classification complete', { category: 'create_task', latency: 5 });
  *   logger.error('Parse failed', { error: 'Invalid JSON', input: rawText });
  *
@@ -262,7 +262,7 @@ class Logger {
  * Global singleton logger instance.
  *
  * Usage:
- *   import { logger } from './logger';
+ *   import { logger } from './logger.js';
  *   logger.info('Service started');
  *   logger.error('Failed to classify', { error: 'No rules matched' });
  */

@@ -17,8 +17,8 @@
  *   detected lang has no registered route → DEFAULT locale (zh-CN).
  */
 
-import { detectLanguage, DetectedLang, LangDetectionResult } from './lang-detector';
-import { normalizeLocale } from './i18n/pattern-loader';
+import { detectLanguage, DetectedLang, LangDetectionResult } from './lang-detector.js';
+import { normalizeLocale } from './i18n/pattern-loader.js';
 
 // ─── Types ──────────────────────────────────────────────────────────
 

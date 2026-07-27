@@ -19,8 +19,8 @@ import {
   TaskEntity,
   IntentResult,
   IntentRequest,
-} from './types';
-import { logger } from './logger';
+} from './types.js';
+import { logger } from './logger.js';
 
 // ─── 配置 ─────────────────────────────────────────────────────────
 
@@ -437,7 +437,7 @@ export function fallbackToRegex(regexResult: IntentResult, error?: string): Inte
  * 全局 LLM Fallback 分类器单例。
  *
  * 使用方式：
- *   import { llmFallback } from './llm-fallback';
+ *   import { llmFallback } from './llm-fallback.js';
  *   const result = await llmFallback.classify(request);
  */
 export const llmFallback = new LLMFallbackClassifier();

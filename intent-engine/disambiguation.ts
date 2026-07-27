@@ -18,8 +18,8 @@ import {
   IntentContext,
   AlternativeIntent,
   TaskEntity,
-} from './types';
-import { ClassificationRule } from './types';
+} from './types.js';
+import { ClassificationRule } from './types.js';
 
 /** A candidate match from the rule engine */
 export interface RuleMatch {

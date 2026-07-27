@@ -20,7 +20,7 @@
  * Based on: Phase 3 M3 task spec (2026-07-16)
  */
 
-import { IntentResult, TaskIntentCategory } from './types';
+import { IntentResult, TaskIntentCategory } from './types.js';
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -418,7 +418,7 @@ class MetricsCollector {
  * Global singleton metrics collector instance.
  *
  * Usage:
- *   import { metrics } from './metrics';
+ *   import { metrics } from './metrics.js';
  *   metrics.recordClassification(result, pipelineResult.cacheHit);
  *   const snapshot = metrics.getMetrics();
  */

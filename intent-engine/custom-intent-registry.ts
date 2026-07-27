@@ -24,7 +24,7 @@ import {
   RuleCondition,
   TaskIntentCategory,
   TaskSubCategory,
-} from './types';
+} from './types.js';
 import {
   CustomIntentRule,
   CustomIntentConfig,
@@ -34,7 +34,7 @@ import {
   RegistryStats,
   ValidationFunction,
   toClassificationRule,
-} from './custom-intent-types';
+} from './custom-intent-types.js';
 
 // ─── Priority Mapping ──────────────────────────────────────────────
 

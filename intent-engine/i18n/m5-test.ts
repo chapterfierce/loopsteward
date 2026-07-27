@@ -13,11 +13,11 @@
  * Based on: M5 i18n framework design (2026-07-21)
  */
 
-import { classify, classifyText, classifyTextWithLocale, classifyBatch } from '../classifier';
-import { normalizeLocale, resolveRules, resolveRulesByPriority, getSupportedLocales, isLocaleSupported, PatternLoader } from './pattern-loader';
-import { EN_RULES, getEnRuleStats } from './en-patterns';
-import { RULES, getRuleStats } from '../patterns';
-import { IntentResult } from '../types';
+import { classify, classifyText, classifyTextWithLocale, classifyBatch } from '../classifier.js';
+import { normalizeLocale, resolveRules, resolveRulesByPriority, getSupportedLocales, isLocaleSupported, PatternLoader } from './pattern-loader.js';
+import { EN_RULES, getEnRuleStats } from './en-patterns.js';
+import { RULES, getRuleStats } from '../patterns.js';
+import { IntentResult } from '../types.js';
 
 // ─── Test Framework (minimal assert) ───────────────────────────────
 

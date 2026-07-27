@@ -11,15 +11,15 @@
  * Run: npx tsx intent-engine/lang-detector-test.ts
  */
 
-import { detectLanguage, detectLang } from './lang-detector';
+import { detectLanguage, detectLang } from './lang-detector.js';
 import {
   resolveRequestLocale,
   routeLang,
   registerLanguageRoute,
   getLanguageRoutes,
-} from './lang-router';
-import { parseEnglishDate, extractEnglishDates } from './i18n/date-parser-en';
-import { classify, classifyText } from './classifier';
+} from './lang-router.js';
+import { parseEnglishDate, extractEnglishDates } from './i18n/date-parser-en.js';
+import { classify, classifyText } from './classifier.js';
 
 // ─── Tiny Test Harness (repo convention) ────────────────────────────
 

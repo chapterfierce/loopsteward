@@ -14,16 +14,16 @@
  *   enabling future language additions without modifying the classifier core.
  *
  * Usage:
- *   import { PatternLoader } from './i18n/pattern-loader';
+ *   import { PatternLoader } from './i18n/pattern-loader.js';
  *   const rules = PatternLoader.resolve('en');
  *   // rules → English ClassificationRule[]
  *
  * Based on: M5 i18n framework design (2026-07-21)
  */
 
-import { ClassificationRule } from '../types';
-import { RULES, getRulesByPriority } from '../patterns';
-import { EN_RULES, getEnRulesByPriority } from './en-patterns';
+import { ClassificationRule } from '../types.js';
+import { RULES, getRulesByPriority } from '../patterns.js';
+import { EN_RULES, getEnRulesByPriority } from './en-patterns.js';
 
 // ─── Types ─────────────────────────────────────────────────────────
 

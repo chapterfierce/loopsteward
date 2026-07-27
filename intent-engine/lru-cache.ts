@@ -13,7 +13,7 @@
  * Based on: phase3-m1-report.md (v1.0, 2026-07-15)
  */
 
-import { IntentResult } from './types';
+import { IntentResult } from './types.js';
 
 // ─── Doubly-Linked List Node ───────────────────────────────────────
 

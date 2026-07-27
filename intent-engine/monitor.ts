@@ -13,10 +13,10 @@
  */
 
 import { IncomingMessage, ServerResponse } from 'node:http';
-import { metrics, MetricsSnapshot, TimelineEntry } from './metrics';
-import { getCacheStats } from './pipeline';
-import type { CacheStats } from './lru-cache';
-import { logger } from './logger';
+import { metrics, MetricsSnapshot, TimelineEntry } from './metrics.js';
+import { getCacheStats } from './pipeline.js';
+import type { CacheStats } from './lru-cache.js';
+import { logger } from './logger.js';
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -309,7 +309,7 @@ export function monitorTimelineHandler(req: IncomingMessage, res: ServerResponse
  * Express-compatible handler for GET /monitor/stats.
  *
  * Usage with Express:
- *   import { monitorStatsHandlerExpress } from './monitor';
+ *   import { monitorStatsHandlerExpress } from './monitor.js';
  *   app.get('/monitor/stats', monitorStatsHandlerExpress);
  */
 export function monitorStatsHandlerExpress(req: any, res: any): void {
@@ -331,7 +331,7 @@ export function monitorStatsHandlerExpress(req: any, res: any): void {
  * Express-compatible handler for GET /monitor/timeline.
  *
  * Usage with Express:
- *   import { monitorTimelineHandlerExpress } from './monitor';
+ *   import { monitorTimelineHandlerExpress } from './monitor.js';
  *   app.get('/monitor/timeline', monitorTimelineHandlerExpress);
  */
 export function monitorTimelineHandlerExpress(req: any, res: any): void {
