@@ -25,6 +25,7 @@ import {
 } from './types';
 import { RULES, getRulesByPriority } from './patterns';
 import { resolveRulesByPriority, normalizeLocale, PatternLoader } from './i18n/pattern-loader';
+import { resolveRequestLocale, RouteResult } from './lang-router';
 import { preprocess, PreprocessResult } from './preprocessor';
 import { extractEntities } from './entity-extractor';
 import {
@@ -52,6 +53,13 @@ export interface ClassifierConfig {
   maxAlternatives: number;
   /** Default locale for pattern selection (default: 'zh-CN') */
   defaultLocale: string;
+  /**
+   * Auto-detect input language when no explicit locale is given (M5).
+   * When true, English input is routed to the English rule set even
+   * without request.locale. Chinese / zh-dominant mixed input keeps
+   * using the pre-compiled zh-CN fast path.
+   */
+  autoDetectLanguage: boolean;
 }
 
 const DEFAULT_CONFIG: ClassifierConfig = {
@@ -59,6 +67,7 @@ const DEFAULT_CONFIG: ClassifierConfig = {
   useContext: true,
   maxAlternatives: 3,
   defaultLocale: 'zh-CN',
+  autoDetectLanguage: true,
 };
 
 // ─── Rule Matching Engine ───────────────────────────────────────────
@@ -317,17 +326,33 @@ export function classify(request: IntentRequest): IntentResult {
   // ═══ Step 1: Preprocess ─────────────────────────────────────────
   const preprocessed = preprocess(request.text);
 
+  // ═══ Step 1.5: Locale Resolution (M5 language-aware) ────────────
+  // Explicit request.locale wins; otherwise auto-detect (zh/en/mixed).
+  let route: RouteResult;
+  if (config.autoDetectLanguage) {
+    route = resolveRequestLocale(request.text, request.locale);
+  } else {
+    route = {
+      locale: request.locale ?? config.defaultLocale,
+      source: request.locale ? 'explicit' : 'fallback',
+    };
+  }
+  const effectiveLocale = route.locale;
+
   // ═══ Step 2: Rule Match (locale-aware) ──────────────────────────
   const { matches, rulesEvaluated, rulesMatched } = matchAllRules(
     preprocessed.normalized,
     preprocessed.tokens,
-    request.locale,
+    effectiveLocale,
   );
 
   // No matches → fallback to "other"
   if (matches.length === 0) {
     const processingTimeMs = Date.now() - startTime;
-    return fallbackResult(request, preprocessed, processingTimeMs, rulesEvaluated);
+    const fb = fallbackResult(request, preprocessed, processingTimeMs, rulesEvaluated);
+    fb.meta.locale = effectiveLocale;
+    fb.meta.localeSource = route.source;
+    return fb;
   }
 
   // Sort matches by score descending (tiebreak: priority)
@@ -368,7 +393,10 @@ export function classify(request: IntentRequest): IntentResult {
   const processingTimeMs = Date.now() - startTime;
 
   if (!disambResult.winner) {
-    return fallbackResult(request, preprocessed, processingTimeMs, rulesEvaluated);
+    const fb = fallbackResult(request, preprocessed, processingTimeMs, rulesEvaluated);
+    fb.meta.locale = effectiveLocale;
+    fb.meta.localeSource = route.source;
+    return fb;
   }
 
   const result = buildResult(
@@ -384,13 +412,18 @@ export function classify(request: IntentRequest): IntentResult {
     contextUsed,
   );
 
+  result.meta.locale = effectiveLocale;
+  result.meta.localeSource = route.source;
+
   return result;
 }
 
 // ─── Convenience API ────────────────────────────────────────────────
 
 /**
- * Quick classify with just text (no context). Uses default locale (zh-CN).
+ * Quick classify with just text (no context).
+ * Locale is auto-detected from the input language (M5); Chinese and
+ * zh-dominant mixed input use the pre-compiled zh-CN fast path.
  */
 export function classifyText(text: string): IntentResult {
   return classify({ text });
@@ -435,8 +468,14 @@ export class RuleClassifier {
   }
 
   async classify(request: IntentRequest): Promise<IntentResult> {
-    // Inject default locale from config if not specified in request
-    if (!request.locale && this.config.defaultLocale) {
+    // When auto-detection is disabled, inject the configured default
+    // locale for requests without an explicit locale. When enabled,
+    // leave locale unset so classify() can route by detected language.
+    if (
+      !request.locale &&
+      !this.config.autoDetectLanguage &&
+      this.config.defaultLocale
+    ) {
       request = { ...request, locale: this.config.defaultLocale };
     }
     return classify(request);

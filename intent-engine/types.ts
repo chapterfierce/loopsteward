@@ -213,6 +213,10 @@ export interface IntentMeta {
   contextUsed: boolean;
   /** Source of the classification */
   source: 'rule_engine' | 'llm' | 'hybrid';
+  /** Effective locale used for rule selection (Phase 3 M5) */
+  locale?: string;
+  /** How the locale was determined (Phase 3 M5) */
+  localeSource?: 'explicit' | 'detected' | 'fallback';
 }
 
 /** Full intent classification result */
