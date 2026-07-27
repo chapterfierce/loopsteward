@@ -8,6 +8,7 @@
     "dev": "tsx src/index.ts",
     "check": "tsc --noEmit",
     "test": "tsx ../intent-engine/test.ts",
+    "test:m5": "tsx intent-engine/lang-detector-test.ts",
     "test:integration": "tsx tests/phase25-integration-verify.js"
   },
   "dependencies": {
