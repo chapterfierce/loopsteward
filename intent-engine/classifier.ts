@@ -22,25 +22,25 @@ import {
   AlternativeIntent,
   ClassificationRule,
   RuleCondition,
-} from './types';
-import { RULES, getRulesByPriority } from './patterns';
-import { resolveRulesByPriority, normalizeLocale, PatternLoader } from './i18n/pattern-loader';
-import { resolveRequestLocale, RouteResult } from './lang-router';
-import { preprocess, PreprocessResult } from './preprocessor';
-import { extractEntities } from './entity-extractor';
+} from './types.js';
+import { RULES, getRulesByPriority } from './patterns.js';
+import { resolveRulesByPriority, normalizeLocale, PatternLoader } from './i18n/pattern-loader.js';
+import { resolveRequestLocale, RouteResult } from './lang-router.js';
+import { preprocess, PreprocessResult } from './preprocessor.js';
+import { extractEntities } from './entity-extractor.js';
 import {
   disambiguate,
   RuleMatch,
   isAmbiguous,
   applyContextBoost,
-} from './disambiguation';
+} from './disambiguation.js';
 import {
   getCompiledRulesByPriority,
   getCompiledRules,
   CompiledRule,
   CompiledCondition,
   getRegexPoolStats,
-} from './regex-pool';
+} from './regex-pool.js';
 
 // ─── Classifier Configuration ───────────────────────────────────────
 
@@ -564,9 +564,9 @@ export function debugClassify(text: string, locale?: string) {
 
 // ─── Exports ────────────────────────────────────────────────────────
 
-export { RULES, getRulesByPriority } from './patterns';
-export { preprocess } from './preprocessor';
-export { extractEntities } from './entity-extractor';
-export { disambiguate, isAmbiguous } from './disambiguation';
-export { resolveRulesByPriority, normalizeLocale, PatternLoader } from './i18n/pattern-loader';
-export { EN_RULES, getEnRulesByPriority } from './i18n/en-patterns';
+export { RULES, getRulesByPriority } from './patterns.js';
+export { preprocess } from './preprocessor.js';
+export { extractEntities } from './entity-extractor.js';
+export { disambiguate, isAmbiguous } from './disambiguation.js';
+export { resolveRulesByPriority, normalizeLocale, PatternLoader } from './i18n/pattern-loader.js';
+export { EN_RULES, getEnRulesByPriority } from './i18n/en-patterns.js';

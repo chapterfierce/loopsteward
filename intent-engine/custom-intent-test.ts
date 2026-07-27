@@ -13,8 +13,8 @@
  * Run: npx tsx intent-engine/custom-intent-test.ts
  */
 
-import { classify, classifyText } from './classifier';
-import { RULES, getRulesByPriority } from './patterns';
+import { classify, classifyText } from './classifier.js';
+import { RULES, getRulesByPriority } from './patterns.js';
 import {
   CustomIntentRegistry,
   registerIntent,
@@ -22,13 +22,13 @@ import {
   getCustomRules,
   getMergedRules,
   loadRulesFromConfig,
-} from './custom-intent-registry';
+} from './custom-intent-registry.js';
 import {
   CustomIntentRule,
   IntentPriority,
   ValidationFunction,
   toClassificationRule,
-} from './custom-intent-types';
+} from './custom-intent-types.js';
 import { writeFileSync, mkdirSync, existsSync, rmSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';

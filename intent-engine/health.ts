@@ -25,10 +25,10 @@
  */
 
 import { IncomingMessage, ServerResponse } from 'node:http';
-import { metrics, MetricsSnapshot } from './metrics';
-import { getCacheStats } from './pipeline';
-import { getRegexPoolStats } from './regex-pool';
-import { logger } from './logger';
+import { metrics, MetricsSnapshot } from './metrics.js';
+import { getCacheStats } from './pipeline.js';
+import { getRegexPoolStats } from './regex-pool.js';
+import { logger } from './logger.js';
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -310,7 +310,7 @@ export function healthHandler(req: IncomingMessage, res: ServerResponse): void {
  * Express-compatible health check handler.
  *
  * Usage with Express:
- *   import { healthHandlerExpress } from './health';
+ *   import { healthHandlerExpress } from './health.js';
  *   app.get('/health', healthHandlerExpress);
  *
  * @param req - Express request (typed as any for zero-dependency)

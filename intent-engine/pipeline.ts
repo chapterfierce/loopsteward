@@ -9,7 +9,7 @@
  *   User Input → Preprocess → Classify → Entity Extract → Disambiguate → Route
  *
  * Usage:
- *   import { IntentPipeline, classifyIntent } from './intent-engine/pipeline';
+ *   import { IntentPipeline, classifyIntent } from './intent-engine/pipeline.js';
  *   const result = classifyIntent('创建登录页重构任务');
  */
 
@@ -23,13 +23,13 @@ import {
   AlternativeIntent,
   ConfidenceAction,
   getConfidenceAction,
-} from './types';
-import { classify, classifyText, classifyBatch } from './classifier';
-import { preprocess } from './preprocessor';
-import { extractEntities } from './entity-extractor';
-import { IntentLRUCache, CacheStats } from './lru-cache';
-import { metrics } from './metrics';
-import { LLMFallbackClassifier, fallbackToRegex } from './llm-fallback';
+} from './types.js';
+import { classify, classifyText, classifyBatch } from './classifier.js';
+import { preprocess } from './preprocessor.js';
+import { extractEntities } from './entity-extractor.js';
+import { IntentLRUCache, CacheStats } from './lru-cache.js';
+import { metrics } from './metrics.js';
+import { LLMFallbackClassifier, fallbackToRegex } from './llm-fallback.js';
 
 // ─── Pipeline Configuration ─────────────────────────────────────────
 
@@ -285,6 +285,7 @@ export async function classifyIntentAsync(
       'LLM Fallback 不可用或超时',
     );
     return {
+      ...pipelineResult,
       ...fallbackResult,
       llmFallbackUsed: false,
     };
@@ -396,6 +397,7 @@ export function debugPipeline(text: string, context?: IntentContext): {
   classification: PipelineResult;
   routeHandler: string;
   entities: TaskEntity[];
+  llmFallbackUsed: boolean;
 } {
   const preprocessed = preprocess(text);
   const classification = classifyIntent(text, context);
@@ -417,15 +419,15 @@ export {
   classifyText,
   classifyBatch,
   debugClassify,
-} from './classifier';
-export { preprocess } from './preprocessor';
-export { extractEntities } from './entity-extractor';
+} from './classifier.js';
+export { preprocess } from './preprocessor.js';
+export { extractEntities } from './entity-extractor.js';
 export {
   disambiguate,
   isAmbiguous,
   applyContextBoost,
-} from './disambiguation';
-export { RULES, getRulesByPriority, getRuleStats } from './patterns';
-export { LLMFallbackClassifier, fallbackToRegex, classifyWithLLM, llmFallback } from './llm-fallback';
-export type { LLMFallbackConfig } from './llm-fallback';
-export * from './types';
+} from './disambiguation.js';
+export { RULES, getRulesByPriority, getRuleStats } from './patterns.js';
+export { LLMFallbackClassifier, fallbackToRegex, classifyWithLLM, llmFallback } from './llm-fallback.js';
+export type { LLMFallbackConfig } from './llm-fallback.js';
+export * from './types.js';

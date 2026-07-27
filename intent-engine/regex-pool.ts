@@ -14,8 +14,8 @@
  * Based on: phase3-m1-report.md (v1.0, 2026-07-15)
  */
 
-import { ClassificationRule, RuleCondition } from './types';
-import { RULES } from './patterns';
+import { ClassificationRule, RuleCondition } from './types.js';
+import { RULES } from './patterns.js';
 
 // ─── Types ─────────────────────────────────────────────────────────
 

@@ -8,8 +8,8 @@
  * Target accuracy: ≥ 90% for primary intent classification
  */
 
-import { classify, classifyText } from './classifier';
-import { IntentResult, TaskIntentCategory } from './types';
+import { classify, classifyText } from './classifier.js';
+import { IntentResult, TaskIntentCategory } from './types.js';
 
 // ─── Test Case Definitions ──────────────────────────────────────────
 

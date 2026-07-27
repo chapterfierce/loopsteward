@@ -15,10 +15,10 @@
  *   8. Reset functionality
  */
 
-import { classifyIntent, clearCache, resetCacheStats } from './pipeline';
-import { metrics } from './metrics';
-import { buildHealthResponse, healthHandlerExpress } from './health';
-import { buildStatsResponse, buildTimelineResponse } from './monitor';
+import { classifyIntent, clearCache, resetCacheStats } from './pipeline.js';
+import { metrics } from './metrics.js';
+import { buildHealthResponse, healthHandlerExpress } from './health.js';
+import { buildStatsResponse, buildTimelineResponse } from './monitor.js';
 
 // ─── Test Framework ────────────────────────────────────────────────
 

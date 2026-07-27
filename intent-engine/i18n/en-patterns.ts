@@ -10,7 +10,7 @@
  * Based on: patterns.ts (v1.0, 2026-07-06) + M5 i18n framework
  */
 
-import { ClassificationRule } from '../types';
+import { ClassificationRule } from '../types.js';
 
 // ─── English Rule Library ──────────────────────────────────────────
 

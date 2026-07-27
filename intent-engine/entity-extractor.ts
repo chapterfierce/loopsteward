@@ -10,8 +10,8 @@
  *  - category: Task category (bug, feature, refactor, doc)
  */
 
-import { TaskEntity, EntityType } from './types';
-import { PreprocessResult } from './preprocessor';
+import { TaskEntity, EntityType } from './types.js';
+import { PreprocessResult } from './preprocessor.js';
 
 /** Single entity extraction result (internal) */
 interface EntityCandidate {

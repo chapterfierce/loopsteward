@@ -13,7 +13,7 @@ import {
   TaskSubCategory,
   RuleCondition,
   ClassificationRule,
-} from './types';
+} from './types.js';
 
 // ─── Intent Priority ───────────────────────────────────────────────
 

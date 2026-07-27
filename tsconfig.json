@@ -20,7 +20,7 @@
   },
   "include": [
     "src/**/*",
-    "../intent-engine/**/*"
+    "tests/m4-integration-test.ts"
   ],
   "exclude": [
     "node_modules",

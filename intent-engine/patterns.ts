@@ -7,7 +7,7 @@
  * Based on: claw-task-intent-rules.md (v1.0, 2026-07-06)
  */
 
-import { ClassificationRule } from './types';
+import { ClassificationRule } from './types.js';
 
 // ─── Rule Library ──────────────────────────────────────────────────
 

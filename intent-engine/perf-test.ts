@@ -9,11 +9,11 @@
  * Based on: phase3-m1-report.md (v1.0, 2026-07-15)
  */
 
-import { classifyText } from './classifier';
-import { classifyIntent } from './pipeline';
-import { getRegexPoolStats } from './regex-pool';
-import { IntentLRUCache, fnv1aHash } from './lru-cache';
-import { IntentResult } from './types';
+import { classifyText } from './classifier.js';
+import { classifyIntent } from './pipeline.js';
+import { getRegexPoolStats } from './regex-pool.js';
+import { IntentLRUCache, fnv1aHash } from './lru-cache.js';
+import { IntentResult } from './types.js';
 
 // ─── Test Utilities ────────────────────────────────────────────────
 
