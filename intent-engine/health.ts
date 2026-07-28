@@ -181,7 +181,13 @@ function buildIntentEngineStatus(
     categoriesTracked: Object.keys(metricsSnapshot.categories).length,
     cacheEnabled: true,
     regexPool: {
-      compiledPatterns: regexPoolStats.compiledCount,
+      // Sum of all compiled pattern groups (was `compiledCount`, a field that
+      // never existed on the stats object and silently reported undefined).
+      compiledPatterns:
+        regexPoolStats.rulesCompiled +
+        regexPoolStats.priorityKeywordsCompiled +
+        regexPoolStats.duePatternsCompiled +
+        regexPoolStats.assigneePatternsCompiled,
       poolSize: regexPoolStats.poolSize,
     },
   };
