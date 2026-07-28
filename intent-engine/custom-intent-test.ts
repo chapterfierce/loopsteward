@@ -153,7 +153,7 @@ function test_01_register_basic_custom_rule(): void {
   assert(result.success, 'TC-01: Custom rule registered successfully');
   assert(result.rule?.id === 'custom-deploy-task', 'TC-01: Rule ID matches');
   assert(result.rule?.enabled === true, 'TC-01: Rule is enabled by default');
-  assert(result.rule?.createdAt > 0, 'TC-01: createdAt is set');
+  assert((result.rule?.createdAt ?? 0) > 0, 'TC-01: createdAt is set');
 
   // Verify the rule appears in custom rules list
   const customRules = getCustomRules();
@@ -379,9 +379,9 @@ function test_07_same_priority_uses_score_tiebreak(): void {
   const customRules = getCustomRules();
   assert(customRules.length === 2, 'TC-07: Two same-priority rules registered');
 
-  // Both should have same priorityValue
+  // Both should have same numeric priority (ClassificationRule.priority = priorityValue)
   assert(
-    customRules[0].priorityValue === customRules[1].priorityValue,
+    customRules[0].priority === customRules[1].priority,
     'TC-07: Both rules have same priority value',
   );
 
@@ -468,7 +468,7 @@ function test_09_load_rules_from_json_file(): void {
   // Verify priority was parsed correctly
   const rule1 = CustomIntentRegistry.getIntent('config-rule-1');
   assert(rule1?.priority === IntentPriority.HIGH, 'TC-09: HIGH priority parsed from string');
-  assert(rule1?.source?.includes('test-rules.json'), 'TC-09: Source tracks config file');
+  assert(rule1?.source?.includes('test-rules.json') ?? false, 'TC-09: Source tracks config file');
 
   // Cleanup
   rmSync(tmpDir, { recursive: true, force: true });
@@ -523,7 +523,10 @@ function test_10_hot_reload_updates_existing_rule(): void {
   assert(rule2?.confidence === 0.95, 'TC-10: Updated confidence is 0.95 after hot reload');
   assert(rule2?.priority === IntentPriority.HIGH, 'TC-10: Updated priority is HIGH after hot reload');
   assert(rule2?.createdAt === rule1?.createdAt, 'TC-10: createdAt preserved during update');
-  assert(rule2?.updatedAt > rule1?.updatedAt, 'TC-10: updatedAt changed during update');
+  assert(
+    (rule2?.updatedAt ?? -Infinity) > (rule1?.updatedAt ?? Infinity),
+    'TC-10: updatedAt changed during update',
+  );
 
   rmSync(tmpDir, { recursive: true, force: true });
   clearRegistry();
@@ -890,7 +893,7 @@ function test_22_duplicate_id_returns_error(): void {
 
   const r2 = registerIntent(ruleDef);
   assert(!r2.success, 'TC-22: Duplicate ID rejected');
-  assert(r2.error?.includes('already exists'), 'TC-22: Error mentions duplicate');
+  assert(r2.error?.includes('already exists') ?? false, 'TC-22: Error mentions duplicate');
 
   clearRegistry();
 }

@@ -89,7 +89,9 @@ function parsePriority(priority?: string | number): IntentPriority {
  * Returns an error message if invalid, null if valid.
  */
 function validateRule(
-  rule: Partial<CustomIntentRule>,
+  rule: Partial<Omit<CustomIntentRule, 'priority'>> & {
+    priority?: IntentPriority | keyof typeof IntentPriority;
+  },
   existingIds: Set<string>,
 ): string | null {
   if (!rule.id || typeof rule.id !== 'string' || rule.id.trim() === '') {
@@ -165,6 +167,7 @@ class CustomIntentRegistryImpl {
   registerIntent(
     ruleDef: Omit<CustomIntentRule, 'priorityValue' | 'enabled' | 'createdAt' | 'updatedAt'> & {
       priority?: IntentPriority;
+      priorityValue?: number;
       enabled?: boolean;
     },
     validator?: ValidationFunction,

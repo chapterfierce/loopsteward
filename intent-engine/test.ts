@@ -419,8 +419,9 @@ function runTests(): TestResult[] {
 
   for (const tc of TEST_CASES) {
     const output = classifyText(tc.message);
-    const primary = output.intents?.[0]?.category ?? output.category;
-    const primarySub = output.intents?.[0]?.subCategory ?? output.subCategory;
+    // IntentResult exposes primary category/subCategory directly (no `intents` array).
+    const primary = output.category;
+    const primarySub = output.subCategory;
     const passed = primary === tc.expectedPrimary;
     const subMatch = !tc.expectedSub || primarySub === tc.expectedSub;
 
@@ -543,7 +544,7 @@ function smokeTest(): boolean {
   let allPassed = true;
   for (const tc of cases) {
     const result = classifyText(tc.text);
-    const primary = result.intents?.[0]?.category ?? result.category;
+    const primary = result.category;
     const ok = primary === tc.expect;
     console.log(`  ${ok ? '✅' : '❌'} "${tc.text}" → ${primary} (expected: ${tc.expect})`);
     if (!ok) allPassed = false;
