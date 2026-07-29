@@ -303,7 +303,14 @@ export class LLMFallbackClassifier {
 
     const entities: TaskEntity[] = Array.isArray(parsed.entities)
       ? parsed.entities
-          .filter((e: any) => e && typeof e.type === 'string' && typeof e.value === 'string')
+          .filter(
+            (e: any) =>
+              e &&
+              typeof e.type === 'string' &&
+              e.type.trim() !== '' &&
+              typeof e.value === 'string' &&
+              e.value.trim() !== '',
+          )
           .map((e: any) => ({
             type: e.type as TaskEntity['type'],
             value: String(e.value),
