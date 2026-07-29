@@ -323,7 +323,7 @@ const ZH_DATE_PATTERNS: ZhDatePattern[] = [
 
   // ── 10. N分钟后 / N分后 / N秒后 ────────────────────────────
   {
-    regex: new RegExp(`^(${CN_QTY})\\s*(?:分|分钟|秒|秒钟)(?:后)?`, 'u'),
+    regex: new RegExp(`^(${CN_QTY})\\s*(?:分|分钟|秒|秒钟)(?:后)?`, 'gu'),
     kind: 'relative_minutes',
     confidence: 0.95,
     resolve: (m, now) => {
@@ -336,7 +336,7 @@ const ZH_DATE_PATTERNS: ZhDatePattern[] = [
 
   // ── 11. N小时后 / N小时N分钟后 ──────────────────────────────
   {
-    regex: new RegExp(`^(${CN_QTY})\\s*(?:小时|钟头)(?:(${CN_QTY})\\s*(?:分|分钟)(?:后)?)?(?:后)?`, 'u'),
+    regex: new RegExp(`^(${CN_QTY})\\s*(?:小时|钟头)(?:(${CN_QTY})\\s*(?:分|分钟)(?:后)?)?(?:后)?`, 'gu'),
     kind: 'relative_hours',
     confidence: 0.95,
     resolve: (m, now) => {
@@ -352,7 +352,7 @@ const ZH_DATE_PATTERNS: ZhDatePattern[] = [
 
   // ── 12. N天后 / N天后再 ───────────────────────────────────
   {
-    regex: new RegExp(`^(${CN_QTY})\\s*(?:天|日后|天后)(?:后|再)?`, 'u'),
+    regex: new RegExp(`^(${CN_QTY})\\s*(?:天|日后|天后)(?:后|再)?`, 'gu'),
     kind: 'relative_days',
     confidence: 0.95,
     resolve: (m, now) => {
@@ -364,7 +364,7 @@ const ZH_DATE_PATTERNS: ZhDatePattern[] = [
 
   // ── 13. N周后 / N个星期后 ─────────────────────────────────
   {
-    regex: new RegExp(`^(${CN_QTY})\\s*(?:周|个?星期)(?:后)?`, 'u'),
+    regex: new RegExp(`^(${CN_QTY})\\s*(?:周|个?星期)(?:后)?`, 'gu'),
     kind: 'relative_weeks',
     confidence: 0.9,
     resolve: (m, now) => {
@@ -376,7 +376,7 @@ const ZH_DATE_PATTERNS: ZhDatePattern[] = [
 
   // ── 14. N个月后 / N月后 ───────────────────────────────────
   {
-    regex: new RegExp(`^(${CN_QTY})\\s*(?:个月?|月)(?:后)?`, 'u'),
+    regex: new RegExp(`^(${CN_QTY})\\s*(?:个月?|月)(?:后)?`, 'gu'),
     kind: 'relative_months',
     confidence: 0.9,
     resolve: (m, now) => {
@@ -457,6 +457,25 @@ const ZH_TIME_PATTERNS: ZhTimePattern[] = [
       }
       if (h < 0 || h > 23 || mm < 0 || mm > 59) return null;
       return { hours: h, minutes: mm };
+    },
+  },
+
+  // ── Time: 晚上8点 / 下午3点 (prefix + hour, no minutes) ──────
+  // Must come BEFORE bare-hour patterns so the AM/PM prefix is honored.
+  {
+    regex: /(上午|下午|早上|晚上|中午)[^\u4e00-\u9fff]{0,8}?(\d{1,2})[点时]$/gu,
+    kind: 'time_of_day',
+    confidence: 0.9,
+    resolve: (m, now) => {
+      let h = parseInt(m[2], 10);
+      const prefix = m[1];
+      if (prefix === '下午' || prefix === '晚上') {
+        if (h < 12) h += 12;
+      } else if (prefix === '中午' && h < 12) {
+        h = h < 11 ? 12 : h;
+      }
+      if (h < 0 || h > 23) return null;
+      return { hours: h, minutes: 0 };
     },
   },
 
@@ -549,15 +568,22 @@ export function extractChineseDates(
     pattern.regex.lastIndex = 0;
     let m: RegExpExecArray | null;
     while ((m = pattern.regex.exec(text)) !== null) {
+      // Guard: zero-length matches would stall the scan; bump lastIndex.
+      if (m[0].length === 0) pattern.regex.lastIndex++;
       const start = m.index;
       const end = m.index + m[0].length;
-      if (overlaps(start, end)) continue;
-      const result = pattern.resolve(m, now);
-      if (!result) continue;
-      claimed.push([start, end]);
-      results.push(
-        buildDateResult(m[0], start, result, pattern.kind, pattern.confidence),
-      );
+      if (!overlaps(start, end)) {
+        const result = pattern.resolve(m, now);
+        if (result) {
+          claimed.push([start, end]);
+          results.push(
+            buildDateResult(m[0], start, result, pattern.kind, pattern.confidence),
+          );
+        }
+      }
+      // Guard: non-global regexes never advance lastIndex — exec() would
+      // return the same match forever. Process only the first match.
+      if (!pattern.regex.global) break;
     }
   }
 
@@ -566,11 +592,18 @@ export function extractChineseDates(
     pattern.regex.lastIndex = 0;
     let m: RegExpExecArray | null;
     while ((m = pattern.regex.exec(text)) !== null) {
+      if (m[0].length === 0) pattern.regex.lastIndex++;
       const start = m.index;
       const end = m.index + m[0].length;
-      if (overlaps(start, end)) continue;
+      if (overlaps(start, end)) {
+        if (!pattern.regex.global) break;
+        continue;
+      }
       const result = pattern.resolve(m, now);
-      if (!result) continue;
+      if (!result) {
+        if (!pattern.regex.global) break;
+        continue;
+      }
       claimed.push([start, end]);
       // Time patterns: date = today midnight, time = parsed hours+minutes
       const date = atMidnight(now);
@@ -590,6 +623,7 @@ export function extractChineseDates(
         kind: pattern.kind,
         confidence: pattern.confidence,
       });
+      if (!pattern.regex.global) break;
     }
   }
 
