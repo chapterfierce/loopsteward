@@ -30,6 +30,8 @@ import { extractEntities } from './entity-extractor.js';
 import { IntentLRUCache, CacheStats } from './lru-cache.js';
 import { metrics } from './metrics.js';
 import { LLMFallbackClassifier, fallbackToRegex } from './llm-fallback.js';
+import { tracer, type Trace, type Span } from './tracer.js';
+import { logger } from './logger.js';
 
 // ─── Pipeline Configuration ─────────────────────────────────────────
 
@@ -148,15 +150,36 @@ export function classifyIntent(
 ): PipelineResult {
   const cfg = { ...DEFAULT_PIPELINE_CONFIG, ...config };
 
+  // ═══ Start Trace ══════════════════════════════════════════════
+  const trace: Trace = tracer.startTrace('intent.classify', {
+    inputLength: text.length,
+    cacheEnabled: cfg.enableCache ? 'true' : 'false',
+  });
+
   // ═══ Stage 0: Check LRU Cache ═════════════════════════════════
   if (cfg.enableCache) {
+    const cacheSpan = tracer.startSpan('cache_lookup', trace.traceId)!;
     const cached = globalCache.get(text);
     if (cached) {
       // Cache hit — build PipelineResult from cached IntentResult
+      tracer.endSpan(cacheSpan, trace.traceId);
+      tracer.setSpanAttribute(cacheSpan.spanId, trace.traceId, 'result', 'hit');
+
       metrics.recordCacheHit();
       metrics.recordClassification(cached, true);
+
+      logger.classification('Cache hit — returning cached result', {
+        category: cached.category,
+        subCategory: cached.subCategory,
+        latencyMs: cached.meta.processingTimeMs,
+        cacheHit: true,
+        confidence: cached.confidence,
+      });
+
       const recommendedAction = getConfidenceAction(cached.confidence);
       const routeHandler = getRouteHandler(cached.category);
+
+      tracer.endTrace(trace);
       return {
         ...cached,
         recommendedAction,
@@ -168,6 +191,8 @@ export function classifyIntent(
       };
     }
     // Cache miss
+    tracer.endSpan(cacheSpan, trace.traceId);
+    tracer.setSpanAttribute(cacheSpan.spanId, trace.traceId, 'result', 'miss');
     metrics.recordCacheMiss();
   }
 
@@ -177,8 +202,15 @@ export function classifyIntent(
     context: cfg.enableContext ? context : undefined,
   };
 
-  // ═══ Stages 1-5: Full classification pipeline ═════════════════
+  // ═══ Stage 1: Preprocess ══════════════════════════════════════
+  const preprocessSpan = tracer.startSpan('preprocess', trace.traceId)!;
+
+  // ═══ Stages 2-5: Full classification pipeline ═════════════════
   const result = classify(request);
+
+  tracer.endSpan(preprocessSpan, trace.traceId);
+  tracer.setSpanAttribute(preprocessSpan.spanId, trace.traceId, 'rulesEvaluated', result.meta.rulesEvaluated);
+  tracer.setSpanAttribute(preprocessSpan.spanId, trace.traceId, 'rulesMatched', result.meta.rulesMatched);
 
   // Determine recommended action
   const recommendedAction = getConfidenceAction(result.confidence);
@@ -202,11 +234,26 @@ export function classifyIntent(
 
   // ═══ Stage 6: Write to LRU Cache ══════════════════════════════
   if (cfg.enableCache) {
+    const cacheWriteSpan = tracer.startSpan('cache_write', trace.traceId)!;
     globalCache.set(text, result);
+    tracer.endSpan(cacheWriteSpan, trace.traceId);
   }
 
   // Record metrics for non-cached classification
   metrics.recordClassification(result, false);
+
+  logger.classification('Classification complete', {
+    category: result.category,
+    subCategory: result.subCategory,
+    latencyMs: result.meta.processingTimeMs,
+    cacheHit: false,
+    confidence: result.confidence,
+  });
+
+  // End trace
+  tracer.endTrace(trace);
+  tracer.setSpanAttribute(trace.rootSpanId, trace.traceId, 'category', result.category);
+  tracer.setSpanAttribute(trace.rootSpanId, trace.traceId, 'confidence', result.confidence);
 
   return pipelineResult;
 }
@@ -245,6 +292,13 @@ export async function classifyIntentAsync(
   // ═══ LLM Fallback 触发 ═══════════════════════════════════════
   // 置信度低于 llmFallbackThreshold 且启用了 LLM Fallback
   if (pipelineResult.confidence < cfg.llmFallbackThreshold) {
+    const llmTrace = tracer.startTrace('intent.llm_fallback', {
+      inputLength: text.length,
+      regexConfidence: pipelineResult.confidence,
+    });
+
+    const llmSpan = tracer.startSpan('llm_classify', llmTrace.traceId)!;
+
     const request: IntentRequest = {
       text,
       context: cfg.enableContext ? context : undefined,
@@ -253,7 +307,12 @@ export async function classifyIntentAsync(
     // 调用 LLM Fallback 分类器
     const llmResult = await globalLLMFallback.classify(request);
 
+    tracer.endSpan(llmSpan, llmTrace.traceId);
+
     if (llmResult) {
+      tracer.setSpanAttribute(llmSpan.spanId, llmTrace.traceId, 'llmSuccess', 'true');
+      tracer.setSpanAttribute(llmSpan.spanId, llmTrace.traceId, 'llmCategory', llmResult.category);
+
       // LLM 分类成功 — 用 LLM 结果构建 PipelineResult
       const recommendedAction = getConfidenceAction(llmResult.confidence);
       const routeHandler = getRouteHandler(llmResult.category);
@@ -276,10 +335,27 @@ export async function classifyIntentAsync(
       // 记录指标
       metrics.recordClassification(llmResult, false);
 
+      logger.classification('LLM Fallback result', {
+        category: llmResult.category,
+        subCategory: llmResult.subCategory,
+        latencyMs: llmResult.meta.processingTimeMs,
+        cacheHit: false,
+        confidence: llmResult.confidence,
+        extra: { llmFallback: true },
+      });
+
+      tracer.endTrace(llmTrace);
       return llmPipelineResult;
     }
 
     // LLM 不可用 — 降级到正则分类器结果
+    tracer.setSpanAttribute(llmSpan.spanId, llmTrace.traceId, 'llmSuccess', 'false');
+    tracer.endTrace(llmTrace, 'error');
+
+    logger.warn('LLM Fallback unavailable, degrading to regex result', {
+      regexConfidence: pipelineResult.confidence,
+    });
+
     const fallbackResult = fallbackToRegex(
       pipelineResult,
       'LLM Fallback 不可用或超时',
@@ -430,4 +506,7 @@ export {
 export { RULES, getRulesByPriority, getRuleStats } from './patterns.js';
 export { LLMFallbackClassifier, fallbackToRegex, classifyWithLLM, llmFallback } from './llm-fallback.js';
 export type { LLMFallbackConfig } from './llm-fallback.js';
+export { tracer, Tracer, type Trace, type Span, type TraceSummary, type TraceContext } from './tracer.js';
+export { logger, Logger, type LogLevel, type LogEntry } from './logger.js';
+export { metrics, MetricsCollector, type MetricsSnapshot } from './metrics.js';
 export * from './types.js';
