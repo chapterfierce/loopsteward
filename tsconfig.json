@@ -19,12 +19,17 @@
     "sourceMap": true
   },
   "include": [
-    "src/**/*",
+    "src/index.ts",
+    "src/m3-integration-test.ts",
+    "src/observability/**/*",
+    "src/task-manager/**/*",
     "intent-engine/**/*",
     "tests/m4-integration-test.ts"
   ],
   "exclude": [
     "node_modules",
-    "dist"
+    "dist",
+    "intent-engine/__tests__",
+    "src/quantization"
   ]
 }
