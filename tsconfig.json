@@ -24,7 +24,9 @@
     "src/observability/**/*",
     "src/task-manager/**/*",
     "intent-engine/**/*",
-    "tests/m4-integration-test.ts"
+    "tests/m4-integration-test.ts",
+    "tests/m10-integration-test.ts",
+    "tests/m11-circuit-breaker-test.ts"
   ],
   "exclude": [
     "node_modules",
