@@ -18,6 +18,12 @@
  */
 
 import { readFileSync, existsSync } from 'fs';
+
+// Re-export IntentPriority as a value (not just type) so that consumers importing
+// from custom-intent-registry.js get the enum as a runtime value.
+// Without this, the type-only import from custom-intent-types.js would strip
+// the enum at compile time, leaving undefined at runtime.
+export { IntentPriority } from './custom-intent-types.js';
 import { resolve } from 'path';
 import {
   ClassificationRule,
