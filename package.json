@@ -12,6 +12,7 @@
     "test:m5": "tsx intent-engine/lang-detector-test.ts",
     "test:integration": "tsx tests/phase25-integration-verify.js",
     "test:m9": "tsx tests/m9-quantization-test.ts",
+    "test:m11": "tsx tests/m11-circuit-breaker-test.ts",
     "bench:m9": "tsx src/benchmark/benchmark.ts"
   },
   "dependencies": {
