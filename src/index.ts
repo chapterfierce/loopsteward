@@ -297,7 +297,7 @@ app.post('/api/intent', (req, res) => {
  * confidence, entities, alternatives, recommendedAction, routeHandler,
  * and trace metadata.
  */
-app.post('/api/v1/intent/classify', (req, res) => {
+app.post('/api/v1/intent/classify', (req: any, res) => {
   const { text, context } = req.body as { text: string; context?: any };
   if (!text || typeof text !== 'string') {
     res.status(400).json({
@@ -340,7 +340,7 @@ app.post('/api/v1/intent/classify', (req, res) => {
  *   - Error counts
  *   - Recent timeline entries
  */
-app.get('/api/v1/intent/stats', (req, res) => {
+app.get('/api/v1/intent/stats', (req: any, res) => {
   const metricsSnapshot = intentMetrics.getMetrics();
   const cacheStats = getCacheStats();
   const tracerStats = {
@@ -362,7 +362,7 @@ app.get('/api/v1/intent/stats', (req, res) => {
  * GET /api/v1/intent/timeline — Recent classification timeline.
  * Query param: limit (default 50, max 500)
  */
-app.get('/api/v1/intent/timeline', (req, res) => {
+app.get('/api/v1/intent/timeline', (req: any, res) => {
   const limit = Math.min(parseInt(req.query['limit'] as string, 10) || 50, 500);
   const timeline = intentMetrics.getTimeline(limit);
   res.json({

@@ -809,6 +809,6 @@ export async function classifyWithLLM(
 // ─── M11: 导出工具函数和类型 ──────────────────────────────────────
 
 export { CircuitBreaker, calculateBackoff };
-export type { LLMEndpointConfig, CircuitBreakerState };
+export type { CircuitBreakerState };
 
 export { DEFAULT_CONFIG as DEFAULT_LLM_FALLBACK_CONFIG };

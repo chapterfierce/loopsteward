@@ -510,3 +510,28 @@ export { tracer, Tracer, type Trace, type Span, type TraceSummary, type TraceCon
 export { logger, Logger, type LogLevel, type LogEntry } from './logger.js';
 export { metrics, MetricsCollector, type MetricsSnapshot } from './metrics.js';
 export * from './types.js';
+
+// ─── M2: Custom Intent Extension API ─────────────────────────────────
+// Re-export the extension API so it is accessible from pipeline.js directly.
+// Consumers can also import from custom-intent-extension.js directly.
+export {
+  extension,
+  type CustomIntentExtension,
+  type CustomRuleDefinition,
+  IntentPriority,
+  registerIntent,
+  unregisterIntent,
+  getCustomRules,
+  getMergedRules,
+  loadRulesFromConfig,
+  CustomIntentRegistry,
+} from './custom-intent-extension.js';
+export type {
+  CustomIntentRule,
+  ValidationFunction,
+  RegistrationResult,
+  RegistryStats,
+  CustomIntentConfig,
+  CustomIntentConfigRule,
+} from './custom-intent-extension.js';
+export { toClassificationRule } from './custom-intent-types.js';
