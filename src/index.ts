@@ -49,10 +49,12 @@ const app = express();
 app.use(express.json({ limit: '1mb' }));
 
 // Observability middleware: context + metrics + tracing + /health + /metrics
+// Skip the JSON /metrics endpoint — we register a Prometheus-format one below.
 setupObservability(app, {
   healthPath: '/health',
   metricsPath: '/metrics',
   enableTracing: true,
+  skipMetricsEndpoint: true,
 });
 
 // Additional /ready endpoint (top-level, per M3 spec)
