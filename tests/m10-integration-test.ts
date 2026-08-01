@@ -105,23 +105,57 @@ let serverProc: ChildProcess | null = null;
 
 async function startServer(): Promise<void> {
   return new Promise((resolve, reject) => {
+    // On Windows, use node with tsx loader directly instead of npx to avoid
+    // .cmd wrapper output buffering issues.
+    const isWin = process.platform === 'win32';
+    const cmd = isWin ? 'node' : 'npx';
+    const args = isWin
+      ? ['--import', 'tsx', 'src/index.ts']
+      : ['tsx', 'src/index.ts'];
+
     serverProc = spawn(
-      'npx',
-      ['tsx', 'src/index.ts'],
+      cmd,
+      args,
       {
         cwd: 'C:\\Users\\46927\\Desktop\\project\\claw-task-service',
         env: { ...process.env, PORT: '3199', LOG_LEVEL: 'ERROR' },
         stdio: ['pipe', 'pipe', 'pipe'],
-        shell: true,
+        shell: isWin ? false : true,
       },
     );
 
     let started = false;
     const timeout = setTimeout(() => {
       if (!started) {
-        reject(new Error('Server failed to start within 15s'));
+        // Last resort: try polling the health endpoint
+        pollHealthEndpoint()
+          .then(() => {
+            started = true;
+            clearTimeout(timeout);
+            setTimeout(resolve, 500);
+          })
+          .catch(() => {
+            reject(new Error('Server failed to start within 15s'));
+          });
       }
     }, 15000);
+
+    // Also try polling health endpoint early (after 2s) in case stdout is buffered
+    setTimeout(() => {
+      if (!started) {
+        pollHealthEndpoint()
+          .then(() => {
+            if (!started) {
+              started = true;
+              clearTimeout(timeout);
+              setTimeout(resolve, 500);
+            }
+          })
+          .catch(() => {
+            // server not ready yet, keep waiting
+          });
+      }
+    }, 2000);
 
     serverProc.stdout?.on('data', (data: Buffer) => {
       const msg = data.toString();
@@ -159,6 +193,24 @@ async function startServer(): Promise<void> {
       }
     });
   });
+}
+
+/**
+ * Poll the health endpoint to check if the server is ready.
+ * Retries every 500ms for up to 13 attempts.
+ */
+async function pollHealthEndpoint(): Promise<void> {
+  const maxAttempts = 26;
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      const res = await fetch('http://localhost:3199/health');
+      if (res.ok) return;
+    } catch {
+      // server not ready
+    }
+    await sleep(500);
+  }
+  throw new Error('Health endpoint not reachable after polling');
 }
 
 async function stopServer(): Promise<void> {

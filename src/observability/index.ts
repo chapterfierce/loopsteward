@@ -42,12 +42,14 @@ export function setupObservability(
     healthPath?: string;
     metricsPath?: string;
     enableTracing?: boolean;
+    skipMetricsEndpoint?: boolean;
   },
 ): void {
   const opts = {
     healthPath: options?.healthPath ?? '/health',
     metricsPath: options?.metricsPath ?? '/metrics',
     enableTracing: options?.enableTracing ?? true,
+    skipMetricsEndpoint: options?.skipMetricsEndpoint ?? false,
   };
 
   // Order matters: context first, then metrics, then tracing
@@ -62,14 +64,16 @@ export function setupObservability(
   app.get(`${opts.healthPath}/live`, livenessHandler);
   app.get(`${opts.healthPath}/ready`, readinessHandler);
 
-  // Metrics endpoint
-  app.get(opts.metricsPath, (req: any, res: any) => {
-    const snapshot = httpMetrics.getMetrics();
-    res.json({
-      timestamp: snapshot.timestamp,
-      http: snapshot,
+  // Metrics endpoint (JSON format; can be overridden by caller for Prometheus format)
+  if (!opts.skipMetricsEndpoint) {
+    app.get(opts.metricsPath, (req: any, res: any) => {
+      const snapshot = httpMetrics.getMetrics();
+      res.json({
+        timestamp: snapshot.timestamp,
+        http: snapshot,
+      });
     });
-  });
+  }
 
   serviceLogger.info('Observability middleware registered', {
     healthPath: opts.healthPath,
