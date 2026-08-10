@@ -30,6 +30,9 @@ import {
   LifecycleError,
 } from './task-lifecycle.js';
 import { generateTaskId } from './task-store.js';
+import { createRequire } from 'node:module';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 // ─── Query Options ─────────────────────────────────────────────────
 
@@ -350,19 +353,50 @@ export class SQLiteStore implements ITaskStore {
    * @param dbPath - Path to SQLite file (default: ./data/tasks.db)
    */
   constructor(dbPath: string = './data/tasks.db') {
-    // Dynamic import to handle environments without node:sqlite
+    // NOTE: this module is ESM ("type": "module"), so bare `require` is not
+    // defined. Use createRequire so the constructor can stay synchronous while
+    // still loading the built-in lazily (environments without node:sqlite must
+    // still be able to import this file and use InMemoryStore).
+    let DatabaseSync: any;
     try {
+      const req = createRequire(import.meta.url);
       // @ts-ignore - node:sqlite is a built-in but may not be in types
-      const { DatabaseSync } = require('node:sqlite');
-      this.db = new DatabaseSync(dbPath);
-      this.db.pragma('journal_mode = WAL'); // Better concurrent write support
-      this.initSchema();
+      ({ DatabaseSync } = req('node:sqlite'));
     } catch (err: any) {
-      // Fallback: if node:sqlite not available, throw helpful error
       throw new Error(
         `SQLiteStore requires Node.js >= 22.13.0 with node:sqlite. ` +
         `Current error: ${err.message}`
       );
+    }
+
+    // Ensure the parent directory exists, otherwise SQLite cannot create the file.
+    const dir = path.dirname(dbPath);
+    if (dir && dir !== '.' && !fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+
+    this.db = new DatabaseSync(dbPath);
+    // node:sqlite has no better-sqlite3-style .pragma(); use exec().
+    this.db.exec('PRAGMA journal_mode = WAL;'); // Better concurrent write support
+    this.db.exec('PRAGMA foreign_keys = ON;');
+    this.initSchema();
+  }
+
+  /**
+   * Run `fn` inside a SQLite transaction.
+   *
+   * node:sqlite does not provide better-sqlite3's `db.transaction()` helper,
+   * so drive BEGIN/COMMIT/ROLLBACK explicitly.
+   */
+  private runInTransaction<T>(fn: () => T): T {
+    this.db.exec('BEGIN');
+    try {
+      const result = fn();
+      this.db.exec('COMMIT');
+      return result;
+    } catch (err) {
+      try { this.db.exec('ROLLBACK'); } catch { /* rollback is best-effort */ }
+      throw err;
     }
   }
 
@@ -500,7 +534,7 @@ export class SQLiteStore implements ITaskStore {
     }
 
     // Use transaction for atomicity
-    const tx = this.db.transaction(() => {
+    this.runInTransaction(() => {
       // Update task status
       const updateStmt = this.db.prepare(
         'UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?'
@@ -515,7 +549,6 @@ export class SQLiteStore implements ITaskStore {
       eventStmt.run(id, task.status, newStatus, new Date().toISOString(), reason ?? null);
     });
 
-    tx();
     return true;
   }
 

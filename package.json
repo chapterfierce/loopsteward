@@ -10,6 +10,7 @@
     "test": "tsx intent-engine/test.ts",
     "test:m4": "tsx tests/m4-integration-test.ts",
     "test:m5": "tsx intent-engine/lang-detector-test.ts",
+    "test:m7": "tsx tests/m7-persistence-test.ts",
     "test:integration": "tsx tests/phase25-integration-verify.js",
     "test:m9": "tsx tests/m9-quantization-test.ts",
     "test:m10": "tsx tests/m10-integration-test.ts",
