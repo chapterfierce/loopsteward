@@ -29,7 +29,7 @@ import {
   LifecycleLogger,
   LifecycleEvent,
 } from './task-lifecycle.js';
-import { TaskStore, generateTaskId } from './task-store.js';
+import { TaskStore, generateTaskId, longestCommonSubstring } from './task-store.js';
 import {
   ITaskStore,
   InMemoryStore,
@@ -105,7 +105,7 @@ export class TaskManager {
       tags: input.tags ?? [],
       archived: false,
     };
-    this.store.insert(task);
+    this.store.create(task);
     // Auto-assign if an assignee was provided at creation time.
     if (task.assignee) {
       this.applyTransition(task, 'assigned', 'auto-assign on create');
@@ -128,8 +128,26 @@ export class TaskManager {
     return this.store.queryExtended(filter);
   }
 
+  /**
+   * Find a task by free-form title reference using longest-common-substring
+   * matching. Falls back to linear scan of active tasks.
+   */
   findTaskByReference(reference: string): Task | undefined {
-    return this.store.findByReference(reference);
+    // Linear scan over non-archived tasks for reference matching.
+    const result = this.store.query({});
+    let best: Task | undefined;
+    let bestScore = 0;
+
+    for (const task of result.tasks) {
+      if (task.archived) continue;
+      const score = longestCommonSubstring(task.title, reference);
+      if (score > bestScore) {
+        bestScore = score;
+        best = task;
+      }
+    }
+
+    return bestScore >= 2 ? best : undefined;
   }
 
   // ── Modify ──────────────────────────────────────────────────────

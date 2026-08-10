@@ -10,6 +10,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'fs';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -459,7 +460,8 @@ describe('Hot-reload from config file', () => {
     const rule1 = extension.get('hot-rule');
     expect(rule1!.confidence).toBe(0.8);
 
-    // Hot-reload with updated confidence
+    // Hot-reload with updated confidence — sleep to avoid timestamp race
+    await sleep(2);
     writeFileSync(
       configPath,
       JSON.stringify({
