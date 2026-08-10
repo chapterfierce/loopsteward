@@ -30,6 +30,12 @@ import {
   LifecycleEvent,
 } from './task-lifecycle.js';
 import { TaskStore, generateTaskId } from './task-store.js';
+import {
+  ITaskStore,
+  InMemoryStore,
+  ExtendedQueryFilter,
+  PaginatedQueryResult,
+} from './task-persistence.js';
 
 // ─── Transition Path Finding ───────────────────────────────────────
 
@@ -69,11 +75,11 @@ export interface ManagerResult {
 // ─── Task Manager ──────────────────────────────────────────────────
 
 export class TaskManager {
-  readonly store: TaskStore;
+  readonly store: ITaskStore;
   readonly lifecycleLog: LifecycleLogger;
 
-  constructor(store?: TaskStore, logger?: LifecycleLogger) {
-    this.store = store ?? new TaskStore();
+  constructor(store?: ITaskStore, logger?: LifecycleLogger) {
+    this.store = store ?? new InMemoryStore();
     this.lifecycleLog = logger ?? new LifecycleLogger();
   }
 
@@ -115,6 +121,11 @@ export class TaskManager {
 
   queryTasks(filter: TaskQueryFilter = {}): TaskQueryResult {
     return this.store.query(filter);
+  }
+
+  /** Extended query with pagination, time range, sorting (M7). */
+  queryTasksExtended(filter: ExtendedQueryFilter = {}): PaginatedQueryResult {
+    return this.store.queryExtended(filter);
   }
 
   findTaskByReference(reference: string): Task | undefined {
