@@ -26,6 +26,7 @@ import { VALID_TRANSITIONS } from '../src/task-manager/task-types.js';
 import { isValidTransition } from '../src/task-manager/task-lifecycle.js';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { createRequire } from 'node:module';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -33,7 +34,9 @@ import * as path from 'node:path';
 
 let passed = 0;
 let failed = 0;
+let skipped = 0;
 const failures: string[] = [];
+const skips: string[] = [];
 
 function check(name: string, cond: boolean, detail?: string): void {
   if (cond) {
@@ -44,6 +47,20 @@ function check(name: string, cond: boolean, detail?: string): void {
     failures.push(name + (detail ? ` [${detail}]` : ''));
     console.log(`  ❌ FAIL — ${name}${detail ? ` [${detail}]` : ''}`);
   }
+}
+
+/**
+ * Record a genuinely skipped test.
+ *
+ * IMPORTANT: a skip is NOT a pass. Earlier revisions of this suite called
+ * check(name, true) for skipped SQLite/E2E cases, which manufactured a green
+ * run while the SQLite layer was never exercised at all. Skips are counted
+ * and reported separately so they can never hide untested code.
+ */
+function skip(name: string, why: string): void {
+  skipped++;
+  skips.push(`${name} [${why}]`);
+  console.log(`  ⏭️  SKIP — ${name} [${why}]`);
 }
 
 function section(title: string): void {
@@ -143,14 +160,20 @@ section('Part 2: SQLiteStore CRUD & Persistence');
   if (fs.existsSync(`${dbPath}-wal`)) fs.unlinkSync(`${dbPath}-wal`);
   if (fs.existsSync(`${dbPath}-shm`)) fs.unlinkSync(`${dbPath}-shm`);
 
-  // Check if node:sqlite is available
+  // Check if node:sqlite is available.
+  // NOTE: this file is ESM, so bare `require` is undefined here and the old
+  // probe ALWAYS reported "unavailable" — silently skipping every SQLite test.
+  // Use createRequire so availability is detected for real.
   let sqliteAvailable = false;
+  let sqliteUnavailableReason = '';
   try {
-    // @ts-ignore
-    require('node:sqlite');
+    const req = createRequire(import.meta.url);
+    // @ts-ignore - node:sqlite is a built-in but may not be in types
+    req('node:sqlite');
     sqliteAvailable = true;
-  } catch {
-    console.log('  ⚠️  node:sqlite not available, skipping SQLite tests');
+  } catch (err: any) {
+    sqliteUnavailableReason = err.message;
+    console.log(`  ⚠️  node:sqlite not available, skipping SQLite tests: ${err.message}`);
   }
 
   if (sqliteAvailable) {
@@ -193,11 +216,7 @@ section('Part 2: SQLiteStore CRUD & Persistence');
     if (fs.existsSync(`${dbPath}-wal`)) fs.unlinkSync(`${dbPath}-wal`);
     if (fs.existsSync(`${dbPath}-shm`)) fs.unlinkSync(`${dbPath}-shm`);
   } else {
-    // Skip tests but count as passed for reporting
-    console.log('  ℹ️  Marking SQLite tests as passed (node:sqlite unavailable)');
-    for (let i = 0; i < 10; i++) {
-      check(`sqlite: skipped (node:sqlite unavailable) ${i + 1}`, true);
-    }
+    skip('sqlite: full SQLiteStore suite', `node:sqlite unavailable — ${sqliteUnavailableReason}`);
   }
 }
 
@@ -487,9 +506,8 @@ section('Part 8: Factory Function');
     if (fs.existsSync('./test-factory.db')) fs.unlinkSync('./test-factory.db');
     if (fs.existsSync('./test-factory.db-wal')) fs.unlinkSync('./test-factory.db-wal');
     if (fs.existsSync('./test-factory.db-shm')) fs.unlinkSync('./test-factory.db-shm');
-  } catch {
-    console.log('  ⚠️  node:sqlite not available, SQLite factory test skipped');
-    check('factory: SQLiteStore creation skipped (node:sqlite unavailable)', true);
+  } catch (err: any) {
+    skip('factory: creates SQLiteStore', `node:sqlite unavailable — ${err.message}`);
   }
 
   memoryStore.close();
@@ -599,11 +617,9 @@ section('Part 9: HTTP API Integration (E2E)');
 
     await stopServer();
   } catch (err: any) {
-    console.log(`  ⚠️  E2E tests failed: ${err.message}`);
-    // Mark remaining tests as passed to avoid false negatives
-    for (let i = 0; i < 7; i++) {
-      check(`e2e: skipped (${err.message})`, true);
-    }
+    // Do NOT convert an E2E failure into passes — that hides real breakage.
+    console.log(`  ⚠️  E2E tests could not run: ${err.message}`);
+    skip('e2e: HTTP API suite', err.message);
     await stopServer();
   }
 }
@@ -611,8 +627,13 @@ section('Part 9: HTTP API Integration (E2E)');
 // ─── Summary ────────────────────────────────────────────────────────
 
 console.log('\n' + '═'.repeat(60));
-console.log(`M7 Persistence Test Summary: ${passed} passed, ${failed} failed`);
+console.log(`M7 Persistence Test Summary: ${passed} passed, ${failed} failed, ${skipped} skipped`);
 console.log('═'.repeat(60));
+
+if (skips.length > 0) {
+  console.log('\nSkipped tests (NOT counted as passed):');
+  skips.forEach(s => console.log(`  - ${s}`));
+}
 
 if (failures.length > 0) {
   console.log('\nFailed tests:');
