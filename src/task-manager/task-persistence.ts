@@ -208,7 +208,7 @@ export class InMemoryStore implements ITaskStore {
     if (filter.createdAfter || filter.createdBefore) {
       tasks = tasks.filter(t => {
         if (filter.createdAfter && t.createdAt < filter.createdAfter) return false;
-        if (filter.createdBefore && t.createdAt > filter.createdBefore) return false;
+        if (filter.createdBefore && t.createdAt >= filter.createdBefore) return false;
         return true;
       });
     }
@@ -248,7 +248,9 @@ export class InMemoryStore implements ITaskStore {
 
     // Pagination
     const page = Math.max(1, filter.page ?? 1);
-    const pageSize = Math.min(500, Math.max(1, filter.pageSize ?? 20));
+    const rawPageSize = filter.pageSize ?? 20;
+    // pageSize=0 is a signal to use the default; guard against 0
+    const pageSize = Math.min(500, Math.max(1, rawPageSize === 0 ? 20 : rawPageSize));
     const total = tasks.length;
     const totalPages = Math.ceil(total / pageSize);
     const offset = (page - 1) * pageSize;
@@ -734,7 +736,9 @@ export class SQLiteStore implements ITaskStore {
 
     // Pagination
     const page = Math.max(1, filter.page ?? 1);
-    const pageSize = Math.min(500, Math.max(1, filter.pageSize ?? 20));
+    const rawPageSize = filter.pageSize ?? 20;
+    // pageSize=0 is a signal to use the default; guard against 0
+    const pageSize = Math.min(500, Math.max(1, rawPageSize === 0 ? 20 : rawPageSize));
     const offset = (page - 1) * pageSize;
 
     const sql = `
