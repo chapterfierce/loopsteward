@@ -33,6 +33,10 @@ import { IntentTaskBridge } from './task-manager/intent-task-bridge.js';
 import type { CreateTaskInput, ModifyTaskInput, TaskQueryFilter } from './task-manager/task-types.js';
 // M10: Import pipeline + metrics for intent API endpoints
 import { classifyIntent, getCacheStats, collectStats, type PipelineResult } from '../intent-engine/pipeline.js';
+
+// M9: Import Notification Manager and webhook routes
+import { NotificationManager, WebhookService, WebhookStore } from './notifications/index.js';
+import { registerWebhookRoutes } from './routes/webhooks.js';
 import { metrics as intentMetrics } from '../intent-engine/metrics.js';
 import { tracer } from '../intent-engine/tracer.js';
 
@@ -195,19 +199,35 @@ app.get('/metrics', (req: any, res: any) => {
 const taskManager = new TaskManager();
 const bridge = new IntentTaskBridge(taskManager, { autoConfirm: true });
 
+// M9: Notification Manager — wires TaskManager lifecycle events → webhook dispatch
+const webhookStore = new WebhookStore();
+const webhookService = new WebhookService({
+  timeoutMs: 5000,
+  retryConfig: { maxAttempts: 3, baseDelayMs: 1000, maxDelayMs: 10000 },
+});
+const notificationManager = new NotificationManager(webhookStore, webhookService);
+
+// M9: Register webhook routes and wire NotificationManager into the Express app
+app.set('notificationManager', notificationManager);
+registerWebhookRoutes(app);
+
 // ─── REST API: Task CRUD ───────────────────────────────────────────
 
 /**
  * POST /api/tasks — Create a task.
  * Body: CreateTaskInput
  */
-app.post('/api/tasks', (req, res) => {
+app.post('/api/tasks', async (req, res) => {
   const input = req.body as CreateTaskInput;
   if (!input?.title || typeof input.title !== 'string') {
     res.status(400).json({ success: false, message: 'title is required' });
     return;
   }
   const result = taskManager.createTask(input);
+  // M9: Dispatch webhook asynchronously after task creation
+  if (result.ok && result.task) {
+    void notificationManager.dispatch('task.created', { task: result.task }).catch(() => {/* swallow — non-blocking */});
+  }
   res.status(result.ok ? 201 : 400).json(result);
 });
 
