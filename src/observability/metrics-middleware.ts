@@ -15,8 +15,11 @@ import { extractRequestContext, type RequestContext } from './request-context.js
 /**
  * Normalize a URL path to a route pattern.
  * e.g. /api/tasks/task-abc-123 → /api/tasks/:id
+ *
+ * Exported so the request-logging middleware can attach the same
+ * normalized route label to access-log entries.
  */
-function normalizeRoute(path: string): string {
+export function normalizeRoute(path: string): string {
   // Replace UUID-like segments with :id
   let normalized = path.replace(/\/[a-f0-9-]{8,}\/?$/i, '/:id');
   // Replace numeric segments with :id
