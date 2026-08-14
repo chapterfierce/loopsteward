@@ -16,6 +16,8 @@
  *   - GET  /api/v1/intent/stats   — classification statistics
  *   - Request-id propagation through pipeline via tracing middleware
  *   - Full observability integration (tracer + metrics on every request)
+ *   - Request access-log middleware (method/path/status/duration per request)
+ *   - Domain metrics in /metrics: task lifecycle + webhook delivery counters
  *
  * Environment variables:
  *   PORT             — listen port (default 3000)
@@ -35,10 +37,15 @@ import type { CreateTaskInput, ModifyTaskInput, TaskQueryFilter } from './task-m
 import { classifyIntent, getCacheStats, collectStats, type PipelineResult } from '../intent-engine/pipeline.js';
 
 // M9: Import Notification Manager and webhook routes
-import { NotificationManager, WebhookService, WebhookStore } from './notifications/index.js';
+import { NotificationManager, WebhookService, WebhookStore, type WebhookEventType } from './notifications/index.js';
 import { registerWebhookRoutes } from './routes/webhooks.js';
 import { metrics as intentMetrics } from '../intent-engine/metrics.js';
 import { tracer } from '../intent-engine/tracer.js';
+
+// M10: Import domain metrics + request access-log middleware
+import { domainMetrics } from './observability/domain-metrics.js';
+import { requestLoggingMiddleware } from './observability/request-logging.js';
+import { LifecycleLogger, type LifecycleEvent } from './task-manager/task-lifecycle.js';
 
 // ─── Configuration ─────────────────────────────────────────────────
 
@@ -63,6 +70,10 @@ setupObservability(app, {
 
 // Additional /ready endpoint (top-level, per M3 spec)
 app.get('/ready', readinessHandler);
+
+// M10: Request access-log middleware — one structured log line per request
+// (method / path / status / duration), registered before all route handlers.
+app.use(requestLoggingMiddleware);
 
 // ─── Prometheus-format /metrics override (M10) ───────────────────
 //
@@ -163,6 +174,42 @@ app.get('/metrics', (req: any, res: any) => {
   lines.push('# TYPE intent_errors_total counter');
   lines.push(`intent_errors_total ${intentSnapshot.errors.total}`);
 
+  // ── Task lifecycle metrics (M10) ───────────────────────────
+  const domainSnapshot = domainMetrics.getMetrics();
+
+  lines.push('# HELP task_created_total Total tasks created');
+  lines.push('# TYPE task_created_total counter');
+  lines.push(`task_created_total ${domainSnapshot.tasks.created}`);
+
+  lines.push('# HELP task_archived_total Total tasks archived');
+  lines.push('# TYPE task_archived_total counter');
+  lines.push(`task_archived_total ${domainSnapshot.tasks.archived}`);
+
+  lines.push('# HELP task_completed_total Total tasks completed');
+  lines.push('# TYPE task_completed_total counter');
+  lines.push(`task_completed_total ${domainSnapshot.tasks.completed}`);
+
+  lines.push('# HELP task_cancelled_total Total tasks cancelled');
+  lines.push('# TYPE task_cancelled_total counter');
+  lines.push(`task_cancelled_total ${domainSnapshot.tasks.cancelled}`);
+
+  lines.push('# HELP task_status_changes_total Task lifecycle transitions');
+  lines.push('# TYPE task_status_changes_total counter');
+  for (const t of domainSnapshot.tasks.statusChanges) {
+    lines.push(`task_status_changes_total{from="${t.from}",to="${t.to}"} ${t.count}`);
+  }
+
+  // ── Webhook metrics (M10) ────────────────────────────────────
+  lines.push('# HELP webhook_dispatches_total Total webhook dispatch invocations');
+  lines.push('# TYPE webhook_dispatches_total counter');
+  lines.push(`webhook_dispatches_total ${domainSnapshot.webhooks.dispatches}`);
+
+  lines.push('# HELP webhook_deliveries_total Webhook delivery attempts by status');
+  lines.push('# TYPE webhook_deliveries_total counter');
+  for (const d of domainSnapshot.webhooks.deliveries) {
+    lines.push(`webhook_deliveries_total{status="${d.status}"} ${d.count}`);
+  }
+
   // ── Tracer metrics ──────────────────────────────────────────
   lines.push('# HELP tracer_active_traces Active trace count');
   lines.push('# TYPE tracer_active_traces gauge');
@@ -196,7 +243,31 @@ app.get('/metrics', (req: any, res: any) => {
 
 // ─── Task Manager & Bridge ─────────────────────────────────────────
 
-const taskManager = new TaskManager();
+// M10: Instrument task lifecycle for domain metrics via the lifecycle logger.
+// The logger wrapper observes every transition (including auto-advance paths)
+// without changing TaskManager behaviour.
+const lifecycleLogger = new LifecycleLogger();
+const logLifecycle = lifecycleLogger.log.bind(lifecycleLogger);
+lifecycleLogger.log = (event: LifecycleEvent): void => {
+  domainMetrics.recordTaskTransition(event.from, event.to);
+  logLifecycle(event);
+};
+const taskManager = new TaskManager(undefined, lifecycleLogger);
+
+// M10: Count task creation / archival (creation is not a lifecycle transition).
+const createTask = taskManager.createTask.bind(taskManager);
+taskManager.createTask = ((input: Parameters<TaskManager['createTask']>[0]) => {
+  const result = createTask(input);
+  if (result.ok) domainMetrics.recordTaskCreated();
+  return result;
+}) as TaskManager['createTask'];
+const archiveTask = taskManager.archiveTask.bind(taskManager);
+taskManager.archiveTask = ((id: Parameters<TaskManager['archiveTask']>[0]) => {
+  const result = archiveTask(id);
+  if (result.ok) domainMetrics.recordTaskArchived();
+  return result;
+}) as TaskManager['archiveTask'];
+
 const bridge = new IntentTaskBridge(taskManager, { autoConfirm: true });
 
 // M9: Notification Manager — wires TaskManager lifecycle events → webhook dispatch
@@ -206,6 +277,22 @@ const webhookService = new WebhookService({
   retryConfig: { maxAttempts: 3, baseDelayMs: 1000, maxDelayMs: 10000 },
 });
 const notificationManager = new NotificationManager(webhookStore, webhookService);
+
+// M10: Count webhook dispatch invocations synchronously — dispatch() is
+// fire-and-forget from the API layer, so the counter must increment at
+// call time, not after delivery resolves.
+const dispatchWebhooks = notificationManager.dispatch.bind(notificationManager);
+notificationManager.dispatch = ((event: WebhookEventType, data: Record<string, unknown>) => {
+  domainMetrics.recordWebhookDispatch();
+  return dispatchWebhooks(event, data);
+}) as NotificationManager['dispatch'];
+
+// M10: Count delivery attempts per status. Re-wires the delivery callback so
+// the store still records history AND domain metrics are updated.
+webhookService.setDeliveryCallback((delivery) => {
+  webhookStore.recordDelivery(delivery);
+  domainMetrics.recordWebhookDelivery(delivery.status);
+});
 
 // M9: Register webhook routes and wire NotificationManager into the Express app
 app.set('notificationManager', notificationManager);
