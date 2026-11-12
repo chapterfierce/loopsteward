@@ -1,0 +1,85 @@
+{
+  "version": 7,
+  "published": "2026-11-10T13:30:55Z",
+  "projects": {
+    "dir:C:/work/alpha": {
+      "key": "dir:C:/work/alpha",
+      "name": "alpha",
+      "roots": ["C:\\work\\alpha"]
+    },
+    "dir:C:/work/beta": {
+      "key": "dir:C:/work/beta",
+      "name": "beta",
+      "roots": ["C:\\work\\beta"]
+    }
+  },
+  "memories": [
+    {
+      "id": "m_alpha",
+      "text": "alpha decision",
+      "kind": "episode",
+      "scope": "project:dir:C:/work/alpha",
+      "why": "user decided",
+      "origin": "inferred",
+      "status": "candidate",
+      "sources": [
+        {
+          "agent": "claude",
+          "session": "s1",
+          "dir": "C:\\work\\alpha",
+          "quote": "do it",
+          "at": "2026-11-10T10:00:00Z"
+        },
+        {
+          "agent": "claude",
+          "session": "s2",
+          "dir": "C:\\work\\alpha",
+          "quote": "yes",
+          "at": "2026-11-10T11:00:00Z"
+        }
+      ],
+      "created": "2026-11-10T10:00:00Z",
+      "updated": "2026-11-10T11:00:00Z"
+    },
+    {
+      "id": "m_global",
+      "text": "global preference",
+      "kind": "preference",
+      "scope": "global",
+      "why": "user likes it",
+      "origin": "inferred",
+      "status": "candidate",
+      "sources": [
+        {
+          "agent": "qoder-cn",
+          "session": "s3",
+          "dir": "C:\\work\\gamma",
+          "quote": "keep it short",
+          "at": "2026-11-10T12:00:00Z"
+        }
+      ],
+      "created": "2026-11-10T12:00:00Z",
+      "updated": "2026-11-10T12:00:00Z"
+    },
+    {
+      "id": "m_beta",
+      "text": "beta fact",
+      "kind": "fact",
+      "scope": "project:dir:C:/work/beta",
+      "why": "project detail",
+      "origin": "inferred",
+      "status": "candidate",
+      "sources": [
+        {
+          "agent": "codex",
+          "session": "s4",
+          "dir": "C:\\work\\beta",
+          "quote": "use sqlite",
+          "at": "2026-11-10T13:00:00Z"
+        }
+      ],
+      "created": "2026-11-10T13:00:00Z",
+      "updated": "2026-11-10T13:00:00Z"
+    }
+  ]
+}
