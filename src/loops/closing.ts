@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { LoopStore } from './loop-store.js';
 import { loopRef } from './loop-ref.js';
 import type { LoopStatus } from './types.js';
@@ -41,7 +42,11 @@ function clampLimit(value: number | undefined): number {
 }
 
 function projectKey(value: string): string {
-  return value.trim().replace(/[\\/]+$/, '').replace(/\\/g, '/').toLowerCase();
+  const trimmed = value.trim().replace(/[\\/]+$/, '');
+  if (!trimmed) return '';
+  const absolute = /^[a-zA-Z]:[\\/]/.test(trimmed) || trimmed.startsWith('/');
+  const normalized = absolute ? trimmed : path.resolve(trimmed);
+  return normalized.replace(/\\/g, '/').toLowerCase();
 }
 
 export function buildClosingReview(options: ClosingOptions): ClosingReview {
