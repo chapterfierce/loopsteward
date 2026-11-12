@@ -219,6 +219,7 @@ describe('installMcpConfigs', () => {
       '--codex-config', f.codexConfig,
       '--claude-config', f.claudeConfig,
       '--cursor-config', f.cursorConfig,
+      '--all',
       '--dry-run',
       '--json',
     ], { cwd: process.cwd(), encoding: 'utf8' });

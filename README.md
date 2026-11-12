@@ -58,8 +58,6 @@ $env:LOOPSTEWARD_MODEL = "gpt-4o-mini"
 $env:LOOPSTEWARD_API_KEY = "<your key>"
 ```
 
-`MAGPIE_BASE_URL`、`MAGPIE_MODEL`、`MAGPIE_API_KEY` 仍然兼容，作为旧配置的别名。任何 OpenAI 兼容网关都可以用；Magpie 只是其中一种，不是依赖。
-
 数据默认写入用户数据目录：
 
 - Windows：`%LOCALAPPDATA%\LoopSteward\loops.db`
@@ -171,7 +169,6 @@ loopsteward install-mcp --uninstall
 
 ## 可选集成
 
-- **Magpie**：`loopsteward coverage` 可以读取 `~/.cache/magpie/sessions.json` 做覆盖对照；`npm run magpie:scan` 是仓库内的只读索引检查工具。核心摄入不依赖 Magpie。
 - **Windows 计划任务**：`loopsteward setup --schedule` 注册 `OpenLoopsRefresh`，每 2 小时刷新缓存。非 Windows 平台跳过，可用 cron 自行调度 `loopsteward ingest`。
 - **MCP 客户端**：Codex、Claude Code、Cursor 可只读查询本机循环。
 
