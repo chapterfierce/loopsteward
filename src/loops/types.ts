@@ -141,6 +141,13 @@ export interface LoopPresentation {
   loopIds: string[];
 }
 
+export interface LoopPresentationStats {
+  loopId: string;
+  count: number;
+  firstPresentedAt: string;
+  lastPresentedAt: string;
+}
+
 export interface LoopStats {
   generatedAt: string;
   windowDays: number;
