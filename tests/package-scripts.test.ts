@@ -40,7 +40,7 @@ describe('package entrypoints', () => {
   });
 
   it('ships only runtime assets and rebuilds before packing', () => {
-    expect(pkg.files).toEqual(['dist', 'skills', 'scripts', 'README.md']);
+    expect(pkg.files).toEqual(['dist', 'skills', 'scripts', 'docs/MCP.md', 'README.md']);
     expect(pkg.scripts.clean).toContain("rmSync('dist'");
     expect(pkg.scripts.prepack).toBe('npm run clean && npm run build:open-loops');
   });
