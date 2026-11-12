@@ -57,6 +57,7 @@ describe('buildClosingReview', () => {
     expect(review.total).toBe(3);
     expect(review.shown).toBe(3);
     expect(review.items.map((item) => item.id)).toEqual([a.id, c.id, b.id]);
+    expect(review.items[0].ref).toBe(loopRef(a.id));
     expect(review.items[0].presentationCount).toBe(2);
     expect(review.items[0].firstPresentedAt).toBe('2026-11-10T11:00:00.000Z');
     expect(review.items[0].lastPresentedAt).toBe('2026-11-10T12:00:00.000Z');
