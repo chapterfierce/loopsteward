@@ -5,7 +5,7 @@
 LoopSteward（守环）是并行 AI 会话的开放循环追踪器。它从 Codex、Claude Code、Claude Desktop（Code/Cowork）、Qoder、ZCode、WorkBuddy、Hermes、DeepSeek Harness（DSH）、Antigravity（CLI）的最近会话尾部提取未闭环事项，落到本机 SQLite，通过 skill 在之后的工作会话里回访，并用独立核对命令关闭已经完成的事项。
 
 **Version:** 2.9.0
-**Status:** Open Loops M1–M146 + MCP phase 1 (read-only) complete; package and global-install path verified; legacy HTTP task service deprecated
+**Status:** Open Loops M1–M151 + MCP phase 1 (read-only) complete; package and global-install path verified; legacy HTTP task service deprecated
 
 ---
 
@@ -45,13 +45,14 @@ LoopSteward（守环）是并行 AI 会话的开放循环追踪器。它从 Code
 
 ## MCP（只读）
 
-MCP phase 1 提供 stdio MCP server，让 Codex、Claude Code、Cursor 通过 MCP 读取本机 Open Loops。只暴露三个工具，全部 `readOnlyHint: true`，不提供创建、修改、关闭、反馈或写回访记录的工具。
+MCP phase 1 提供 stdio MCP server，让 Codex、Claude Code、Cursor 通过 MCP 读取本机 Open Loops。只暴露四个工具，全部 `readOnlyHint: true`，不提供创建、修改、关闭、反馈或写回访记录的工具。
 
 | 工具 | 用途 | 参数 |
 |------|------|------|
 | `loops_context` | 返回指定项目最多 3 条未闭环事项 | `projectDir?`、`limit?`（上限 3） |
 | `loops_search` | 按文本、状态、项目搜索 | `query?`、`status?`、`project?`、`limit?` |
 | `loops_get` | 按稳定 ref 取详情和来源消息摘录 | `ref`、`limit?` |
+| `loops_closing` | 列出已展示但未关闭的循环，按展示次数排序 | `projectDir?`、`limit?`（默认 10，上限 20） |
 
 先构建，再直接运行：
 
@@ -70,7 +71,7 @@ npm run loops:install-mcp -- --uninstall --json
 
 默认目标：Codex `~/.codex/config.toml`、Claude 当前项目 `.mcp.json`、Cursor `~/.cursor/mcp.json`。可用 `--project-dir`、`--codex-config`、`--claude-config`、`--cursor-config` 覆盖；`--agents codex,claude,cursor` 限定客户端。详细协议说明见 `docs/MCP.md`。
 
-这一层不改变现有数据库 schema，不写回访、展示、反馈或循环状态；M2 的类型化 ledger 和 M3 的 closing ceremony 不在本阶段范围内。
+这一层不改变现有数据库 schema，不写回访、展示、反馈或循环状态；`loops_closing` 只读展示「已展示但未关闭」的清单，真正关闭仍需用户确认。
 
 ---
 

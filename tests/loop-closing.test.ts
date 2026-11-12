@@ -88,6 +88,26 @@ describe('buildClosingReview', () => {
     expect(formatClosingReview(review)).toContain('还有 1 条没列');
   });
 
+  it('filters the closing list by project directory', () => {
+    const store = openStore();
+    const alpha = seed(store, 'A');
+    const beta = seed(store, 'B', {
+      projectDir: 'C:/work/beta',
+      projectName: 'beta',
+    });
+    store.recordPresentation([alpha.id], '2026-11-10T11:00:00.000Z', 'hot', 'hot');
+    store.recordPresentation([beta.id], '2026-11-10T12:00:00.000Z', 'hot', 'hot');
+
+    const review = buildClosingReview({
+      store,
+      now: new Date('2026-11-10T14:00:00.000Z'),
+      projectDir: 'C:\\work\\beta\\',
+    });
+
+    expect(review.total).toBe(1);
+    expect(review.items[0].id).toBe(beta.id);
+  });
+
   it('excludes never-presented, resolved, and snoozed loops', () => {
     const store = openStore();
     const presented = seed(store, 'A');
