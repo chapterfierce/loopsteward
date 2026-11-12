@@ -61,8 +61,8 @@ describe.skipIf(process.platform !== 'win32')('open-loops.ps1', () => {
     const focusedPayload = JSON.parse(focused.stdout) as { argv: string[]; cwd: string };
     const projectIndex = focusedPayload.argv.indexOf('--project');
     expect(projectIndex).toBeGreaterThanOrEqual(0);
-    expect(fs.realpathSync.native(focusedPayload.argv[projectIndex + 1]))
-      .toBe(fs.realpathSync.native(caller));
+    const forwarded = focusedPayload.argv[projectIndex + 1];
+    expect(fs.statSync(forwarded).ino).toBe(fs.statSync(caller).ino);
     expect(path.resolve(focusedPayload.cwd)).toBe(path.resolve(root));
 
     const disabled = runWrapper(wrapper, caller, ['digest', '--no-project-focus']);
