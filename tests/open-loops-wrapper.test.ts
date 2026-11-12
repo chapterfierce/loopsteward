@@ -63,7 +63,7 @@ describe.skipIf(process.platform !== 'win32')('open-loops.ps1', () => {
     expect(projectIndex).toBeGreaterThanOrEqual(0);
     const forwarded = focusedPayload.argv[projectIndex + 1];
     expect(fs.statSync(forwarded).ino).toBe(fs.statSync(caller).ino);
-    expect(path.resolve(focusedPayload.cwd)).toBe(path.resolve(root));
+    expect(fs.statSync(focusedPayload.cwd).ino).toBe(fs.statSync(root).ino);
 
     const disabled = runWrapper(wrapper, caller, ['digest', '--no-project-focus']);
     expect(disabled.status).toBe(0);

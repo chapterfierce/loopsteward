@@ -105,13 +105,9 @@ let serverProc: ChildProcess | null = null;
 
 async function startServer(): Promise<void> {
   return new Promise((resolve, reject) => {
-    // On Windows, use node with tsx loader directly instead of npx to avoid
-    // .cmd wrapper output buffering issues.
-    const isWin = process.platform === 'win32';
-    const cmd = isWin ? 'node' : 'npx';
-    const args = isWin
-      ? ['--import', 'tsx', 'src/index.ts']
-      : ['tsx', 'src/index.ts'];
+    // Run the server as a direct child so SIGTERM reaches it on every platform.
+    const cmd = process.execPath;
+    const args = ['--import', 'tsx', 'src/index.ts'];
 
     serverProc = spawn(
       cmd,
@@ -120,7 +116,7 @@ async function startServer(): Promise<void> {
         cwd: process.cwd(),
         env: { ...process.env, PORT: '3199', LOG_LEVEL: 'ERROR' },
         stdio: ['pipe', 'pipe', 'pipe'],
-        shell: isWin ? false : true,
+        shell: false,
       },
     );
 
