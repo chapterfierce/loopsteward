@@ -362,7 +362,7 @@ npm install -g .\loopsteward-2.9.0.tgz
 loopsteward --help
 ```
 
-`prepack` 会清理 `dist` 并只重建 `src/loops` + `src/magpie`；tarball 只含 `dist/`、`skills/`、`scripts/`、`README.md` 和 `package.json`，不包含 `tests/`、`src/`、`docs/` 或本机数据库。全局安装不依赖 devDependencies。
+`prepack` 会清理 `dist` 并只重建 `src/loops` + `src/magpie`；tarball 只含 `dist/`、`skills/`、`scripts/`、`docs/MCP.md`、`README.md` 和 `package.json`，不包含 `tests/`、`src/`、其他 `docs/` 或本机数据库。全局安装不依赖 devDependencies。
 
 全局安装后运行 `loopsteward setup` 安装 skill 和会话入口策略。当前重构阶段默认只装 Hermes，其他 Agent 需显式 `--agents` 才安装；skill 的命令路径会指向全局包，不需要保留仓库目录。
 
