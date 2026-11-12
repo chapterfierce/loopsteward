@@ -4,6 +4,14 @@
   "description": "Open Loops tracker for parallel AI sessions",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chapterfierce/loopsteward.git"
+  },
+  "homepage": "https://github.com/chapterfierce/loopsteward#readme",
+  "bugs": {
+    "url": "https://github.com/chapterfierce/loopsteward/issues"
+  },
   "keywords": [
     "open-loops",
     "ai-agents",
