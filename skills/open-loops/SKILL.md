@@ -82,14 +82,60 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "C:\loopsteward\scripts\open
 
 - Use `total` and `shown`. Show at most 10 rows in the returned order; do not re-rank.
 - Each row has title, project, presentation count, last shown date, confidence, and ref.
+- If a row has `completion`, show `possible completion (N%)` and the `reason` before its next action. `completionTotal` says how many rows have this evidence and are listed first.
 - Ask one question for each: done, later, or drop. Do not infer a verdict from the repeat count.
+- Completion evidence is a hint, not a verdict. Still ask for done, later, or drop, and never close from `completion` alone.
 - Apply only explicit answers, one batch per verdict:
   - done: `update --refs <codes> --status resolved --note "user confirmed done in closing review"`
   - later: `update --refs <codes> --status snoozed --snooze-hours 24`
   - drop: `update --refs <codes> --status dropped --note "user dropped in closing review"`
+- When the user says "all of these are done" / "close all of these", first repeat the count and ask for one confirmation ("Close these N items?"). Only after they confirm, close every ref in the closing list just shown with one `--refs` command. Never infer "all done" from silence, and never batch-close a list the user has not just seen.
 - Never close or drop on silence. A high presentation count means "shown often", not "done".
 - If `total > shown`, say how many are left and offer "continue closing" for the next batch.
 - This command is read-only; it does not mark presentations or change loop state.
+
+When the user asks for a project-scoped closing review in Chinese or English ("close out this project", "what is left in this project"), run:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "C:\loopsteward\scripts\open-loops.ps1" closing --project . --limit 10 --json
+```
+
+The wrapper resolves `.` to the caller's current directory, not the installed package root. Use the global command when the user says just "close out"; use the project-scoped command only when the user names the current project or asks to limit the cleanup to it.
+
+### Filter closing by source
+
+When the user asks to separate their own commitments from assistant suggestions, add `--origin` to the same `closing` command:
+
+- `--origin user` shows loops with user evidence.
+- `--origin assistant` shows assistant-only suggestions the user never confirmed.
+- `--origin mixed` shows loops with both user and assistant evidence.
+- "Only mine" / "only my items" -> `--origin user`; "only assistant suggestions" -> `--origin assistant`; "only mixed" -> `--origin mixed`.
+
+The JSON response includes `origin`, `originTotals`, and the filtered `total`. State the filtered total and all three counts from `originTotals` before listing rows. If the filtered total is 0 but another source has items, say how many and offer to switch filters. Do not silently fall back to all sources, and do not treat assistant suggestions as user tasks.
+
+### Show only items with completion evidence
+
+When the user asks to confirm only the items that look done ("only show the ones with completion evidence", "quick close pass"), add `--completion`:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "C:\loopsteward\scripts\open-loops.ps1" closing --completion --limit 10 --json
+```
+
+- The JSON response has `completionOnly: true`; `completionTotal` equals `total` because every row has evidence.
+- Still ask done, later, or drop for each row. Completion evidence is a hint, not a verdict; never close from evidence alone.
+- If `total` is 0, say there is no evidence-backed closing item and offer the full closing list.
+
+### Show only my completion evidence
+
+When the user asks to see only their own completion evidence ("only my completion items", "my own completion evidence"), add `--origin user` to the same command:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "C:\loopsteward\scripts\open-loops.ps1" closing --completion --origin user --limit 10 --json
+```
+
+- Report `originTotals` first; the filtered list may be empty even when other sources have completion evidence.
+- Do not silently fall back to all sources. Say how many other-source completion items remain.
+- Still ask done, later, or drop; never close from evidence alone.
 
 ## One project's backlog
 
@@ -288,6 +334,19 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "C:\loopsteward\scripts\open
 ```
 
 This only downgrades open weak-evidence loops to pending; it does not close loops or change existing pending items.
+
+## Archive stale sessions
+
+When the user asks to clean up old temporary session workspaces ("archive stale sessions", "clean up temp sessions"), run:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "C:\loopsteward\scripts\open-loops.ps1" archive-sessions --days 7 --limit 20
+```
+
+- Preview only: report the header total and the rows shown. Do not archive anything yet.
+- Ask for one confirmation, then rerun the same command with `--apply` appended.
+- Only the batch just shown is archived; say how many remain unprocessed if any, and offer to rerun or raise `--limit`.
+- Items the user explicitly marked as forgotten are never included. Archived items can be restored with `update --status open`.
 
 ## Session coverage
 

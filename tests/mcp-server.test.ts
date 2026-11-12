@@ -221,6 +221,18 @@ afterEach(async () => {
 }, 30000);
 
 describe('LoopSteward MCP server', () => {
+  it('reports the package version in the initialize handshake', async () => {
+    const { dbPath } = fixture('version');
+    const client = new McpStdioClient(dbPath);
+    clients.push(client);
+    const result = await client.initialize();
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'),
+    ) as { version: string };
+    expect(result.serverInfo.name).toBe('loopsteward');
+    expect(result.serverInfo.version).toBe(manifest.version);
+  });
+
   it('completes the initialize handshake and exposes only read-only tools', async () => {
     const { dbPath } = fixture('list');
     const client = await connect(dbPath);
@@ -231,6 +243,8 @@ describe('LoopSteward MCP server', () => {
       'loops_get',
       'loops_search',
     ]);
+    const closing = result.tools.find((tool: any) => tool.name === 'loops_closing');
+    expect(closing.description).toContain('completion evidence');
     for (const tool of result.tools) {
       expect(tool.annotations?.readOnlyHint).toBe(true);
       expect(tool.name).not.toMatch(/create|update|close|delete|write/i);
@@ -286,6 +300,17 @@ describe('LoopSteward MCP server', () => {
       store.recordPresentation([loopIds[0]], '2026-11-10T11:00:00.000Z', 'hot', 'hot');
       store.recordPresentation([loopIds[0]], '2026-11-10T12:00:00.000Z', 'hot', 'recap');
       store.recordPresentation([loopIds[4]], '2026-11-10T13:00:00.000Z', 'hot', 'hot');
+      store.setReconcileCache(
+        'codex:closing',
+        'hash-closing',
+        [{
+          loopId: loopIds[0],
+          confidence: 0.95,
+          reason: 'verified in a later session',
+          evidenceMessageIds: [],
+        }],
+        '2026-11-10T13:30:00.000Z',
+      );
     } finally {
       store.close();
     }
@@ -293,12 +318,136 @@ describe('LoopSteward MCP server', () => {
     const client = await connect(dbPath);
     const all = payload(await callTool(client, 'loops_closing', { limit: 10 }));
     expect(all.total).toBe(2);
+    expect(all.completionTotal).toBe(1);
     expect(all.items[0].ref).toBe(loopRef(loopIds[0]));
     expect(all.items[0].presentationCount).toBe(2);
+    expect(all.items[0].why).toBeTruthy();
+    expect(all.items[0].completion.confidence).toBe(0.95);
 
     const alphaOnly = payload(await callTool(client, 'loops_closing', { projectDir: alpha }));
     expect(alphaOnly.total).toBe(1);
     expect(alphaOnly.items[0].title).toBe('Alpha login');
+
+    const completionOnly = payload(await callTool(client, 'loops_closing', {
+      completionOnly: true,
+    }));
+    expect(completionOnly.completionOnly).toBe(true);
+    expect(completionOnly.total).toBe(1);
+    expect(completionOnly.items[0].ref).toBe(loopRef(loopIds[0]));
+  });
+
+  it('filters closing items by origin and rejects an invalid origin', async () => {
+    const { dbPath, alpha } = fixture('closing-origin');
+    const store = new LoopStore(dbPath);
+    try {
+      const user = store.listAllLoops().find((loop) => loop.title === 'Alpha login')!;
+      store.recordPresentation([user.id], '2026-11-10T11:00:00.000Z', 'hot', 'hot');
+
+      const signalId = 'sig-closing-assistant';
+      store.saveSignal({
+        id: signalId,
+        source: 'session',
+        sourceId: 'session-closing-assistant',
+        messageId: 'msg-closing-assistant',
+        agent: 'codex',
+        role: 'assistant',
+        text: 'assistant suggestion for closing',
+        projectDir: alpha,
+        capturedAt: '2026-11-10T10:00:00.000Z',
+        contentHash: 'hash-closing-assistant',
+      });
+      const assistant = store.saveLoop(
+        {
+          title: 'Assistant cleanup',
+          nextAction: 'decide whether to keep this suggestion',
+          why: 'assistant suggested it',
+          confidence: 0.9,
+          sourceSignalIds: [signalId],
+        },
+        {
+          projectDir: alpha,
+          projectName: 'alpha',
+          firstSeen: '2026-11-10T10:00:00.000Z',
+          lastSeen: '2026-11-10T10:00:00.000Z',
+        },
+      ).loop;
+      store.recordPresentation([assistant.id], '2026-11-10T12:00:00.000Z', 'hot', 'hot');
+      store.setReconcileCache(
+        'codex:closing-origin',
+        'hash-closing-origin',
+        [
+          {
+            loopId: user.id,
+            confidence: 0.95,
+            reason: 'user item verified in a later session',
+            evidenceMessageIds: [],
+          },
+          {
+            loopId: assistant.id,
+            confidence: 0.92,
+            reason: 'assistant item verified in a later session',
+            evidenceMessageIds: [],
+          },
+        ],
+        '2026-11-10T13:30:00.000Z',
+      );
+    } finally {
+      store.close();
+    }
+
+    const client = await connect(dbPath);
+    const assistantOnly = payload(await callTool(client, 'loops_closing', {
+      projectDir: alpha,
+      origin: 'assistant',
+    }));
+    expect(assistantOnly.origin).toBe('assistant');
+    expect(assistantOnly.total).toBe(1);
+    expect(assistantOnly.items[0].title).toBe('Assistant cleanup');
+    expect(assistantOnly.items[0].origin).toBe('assistant');
+    expect(assistantOnly.originTotals).toEqual({ user: 1, assistant: 1, mixed: 0 });
+
+    const userOnly = payload(await callTool(client, 'loops_closing', {
+      projectDir: alpha,
+      origin: 'user',
+    }));
+    expect(userOnly.total).toBe(1);
+    expect(userOnly.items[0].title).toBe('Alpha login');
+
+    const completionOnly = payload(await callTool(client, 'loops_closing', {
+      projectDir: alpha,
+      completionOnly: true,
+    }));
+    expect(completionOnly.completionOnly).toBe(true);
+    expect(completionOnly.total).toBe(2);
+    expect(completionOnly.completionTotal).toBe(2);
+    expect(completionOnly.originTotals).toEqual({ user: 1, assistant: 1, mixed: 0 });
+
+    const userCompletionOnly = payload(await callTool(client, 'loops_closing', {
+      projectDir: alpha,
+      completionOnly: true,
+      origin: 'user',
+    }));
+    expect(userCompletionOnly.origin).toBe('user');
+    expect(userCompletionOnly.completionOnly).toBe(true);
+    expect(userCompletionOnly.total).toBe(1);
+    expect(userCompletionOnly.originTotals).toEqual({ user: 1, assistant: 1, mixed: 0 });
+    expect(userCompletionOnly.items[0].title).toBe('Alpha login');
+    expect(userCompletionOnly.items[0].completion.confidence).toBe(0.95);
+
+    const assistantCompletionOnly = payload(await callTool(client, 'loops_closing', {
+      projectDir: alpha,
+      completionOnly: true,
+      origin: 'assistant',
+    }));
+    expect(assistantCompletionOnly.origin).toBe('assistant');
+    expect(assistantCompletionOnly.completionOnly).toBe(true);
+    expect(assistantCompletionOnly.total).toBe(1);
+    expect(assistantCompletionOnly.items[0].title).toBe('Assistant cleanup');
+    expect(assistantCompletionOnly.items[0].completion.confidence).toBe(0.92);
+
+    const invalid = await callTool(client, 'loops_closing', { origin: 'system' });
+    expect(invalid.isError).toBe(true);
+    expect(payload(invalid).error).toContain('invalid origin');
   });
 
   it('reports an ambiguous ref instead of picking one loop', async () => {

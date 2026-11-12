@@ -84,6 +84,35 @@ jobs:
       - name: Run Open Loops tests
         run: npm test
 
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            coverage/
+            test-results/
+          retention-days: 7
+
+  legacy:
+    name: Legacy HTTP (historical, non-blocking)
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck]
+    timeout-minutes: 15
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
       - name: Run legacy intent tests
         run: npm run test:legacy
 
@@ -95,15 +124,26 @@ jobs:
           npm run test:m10
           npm run test:m11
 
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v4
+  package:
+    name: Package
+    runs-on: ubuntu-latest
+    needs: [test]
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          name: test-results
-          path: |
-            coverage/
-            test-results/
-          retention-days: 7
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify npm package
+        run: npm run verify:package
 
   build:
     name: Build

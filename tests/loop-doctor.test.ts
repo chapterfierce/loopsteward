@@ -75,6 +75,10 @@ describe('loop doctor', () => {
     expect(report.ok).toBe(true);
     expect(check(report, 'database').status).toBe('ok');
     expect(check(report, 'ingest').status).toBe('warn');
+    expect(check(report, 'sources')).toMatchObject({
+      status: 'ok',
+      detail: '暂无信号',
+    });
     expect(check(report, 'feedback').status).toBe('warn');
     expect(check(report, 'review-cycle')).toMatchObject({
       status: 'ok',
@@ -82,6 +86,54 @@ describe('loop doctor', () => {
     });
     expect(check(report, 'skills').detail).toContain('6/6');
     expect(report.warnings.some((warning) => warning.includes('真实反馈'))).toBe(true);
+  });
+
+  it('reports per-agent signal freshness', () => {
+    const dir = tempDir('sources');
+    const dbPath = path.join(dir, 'loops.db');
+    const store = new LoopStore(dbPath);
+    store.saveSignal({
+      id: 'codex:s1:m1',
+      source: 'session',
+      sourceId: 's1',
+      messageId: 'm1',
+      agent: 'codex',
+      role: 'assistant',
+      text: 'fresh source',
+      projectDir: 'C:/work/alpha',
+      capturedAt: '2026-11-11T10:00:00.000Z',
+      contentHash: 'm1',
+    });
+    store.saveSignal({
+      id: 'claude:s1:m1',
+      source: 'session',
+      sourceId: 's2',
+      messageId: 'c1',
+      agent: 'claude',
+      role: 'assistant',
+      text: 'older source',
+      projectDir: 'C:/work/alpha',
+      capturedAt: '2026-11-10T10:00:00.000Z',
+      contentHash: 'c1',
+    });
+    store.close();
+    const home = path.join(dir, 'home');
+    installSkillCopies(home);
+
+    const report = buildLoopDoctor({
+      dbPath,
+      home,
+      localAppData: path.join(home, 'AppData', 'Local'),
+      now: new Date('2026-11-11T12:00:00.000Z'),
+      skillSourcePath: sourcePath,
+      scheduledTask: false,
+      buildCheck: false,
+    });
+
+    const sources = check(report, 'sources');
+    expect(sources.status).toBe('ok');
+    expect(sources.detail).toContain('codex 2.0 小时');
+    expect(sources.detail).toContain('claude 1.1 天');
   });
 
   it('warns when a weekly review pass has stalled', () => {
@@ -281,6 +333,39 @@ describe('loop doctor', () => {
     expect(check(report, 'skills').detail).toContain('codex: 不一致');
   });
 
+  it.skipIf(process.platform !== 'win32')('warns when an installed skill points at a missing wrapper', () => {
+    const dir = tempDir('missing-wrapper');
+    const dbPath = path.join(dir, 'loops.db');
+    const store = new LoopStore(dbPath);
+    store.close();
+    const home = path.join(dir, 'home');
+    const localAppData = path.join(home, 'AppData', 'Local');
+    const movedPackageRoot = path.join(dir, 'moved-package');
+    const content = renderOpenLoopsSkill(fs.readFileSync(sourcePath, 'utf8'), movedPackageRoot);
+    for (const target of skillAgentTargets({ homeDir: home, localAppData })) {
+      fs.mkdirSync(path.dirname(target.target), { recursive: true });
+      fs.writeFileSync(target.target, content, 'utf8');
+    }
+
+    const report = buildLoopDoctor({
+      packageRoot: movedPackageRoot,
+      dbPath,
+      home,
+      localAppData,
+      now: new Date('2026-11-11T12:00:00.000Z'),
+      skillSourcePath: sourcePath,
+      scriptPath: path.join(process.cwd(), 'scripts', 'open-loops.ps1'),
+      scheduledTask: false,
+      buildCheck: false,
+      mcpCheck: false,
+      sessionPolicy: false,
+    });
+
+    expect(report.ok).toBe(true);
+    expect(check(report, 'skills').status).toBe('warn');
+    expect(check(report, 'skills').detail).toContain('wrapper 不存在');
+  });
+
   it('warns when the oldest reconcile cache row exceeds the retention window', () => {
     const dir = tempDir('stale-cache');
     const dbPath = path.join(dir, 'loops.db');
@@ -431,6 +516,85 @@ describe('loop doctor', () => {
     const freshReport = buildLoopDoctor(common);
     expect(check(freshReport, 'build').status).toBe('ok');
     expect(check(freshReport, 'build').detail).toContain('dist 与源码一致');
+  });
+});
+
+describe('mcp client check', () => {
+  function baseOptions(dir: string, home: string) {
+    const dbPath = path.join(dir, 'loops.db');
+    const store = new LoopStore(dbPath);
+    store.close();
+    return {
+      dbPath,
+      home,
+      localAppData: path.join(home, 'AppData', 'Local'),
+      now: new Date('2026-11-11T12:00:00.000Z'),
+      skillSourcePath: sourcePath,
+      scheduledTask: false,
+      buildCheck: false,
+      sessionPolicy: false,
+      mcpProjectDir: dir,
+    };
+  }
+
+  it('treats MCP as optional when no client config exists', () => {
+    const dir = tempDir('mcp-none');
+    const home = path.join(dir, 'home');
+    const report = buildLoopDoctor(baseOptions(dir, home));
+
+    expect(check(report, 'mcp')).toMatchObject({
+      status: 'ok',
+      detail: expect.stringContaining('未配置 MCP 客户端'),
+    });
+  });
+
+  it('validates codex, claude, and cursor server paths', () => {
+    const dir = tempDir('mcp-valid');
+    const home = path.join(dir, 'home');
+    const serverPath = path.join(dir, 'dist', 'src', 'mcp', 'server.js');
+    fs.mkdirSync(path.dirname(serverPath), { recursive: true });
+    fs.writeFileSync(serverPath, '// server\n');
+    const codexConfig = path.join(dir, 'codex.toml');
+    const claudeConfig = path.join(dir, '.mcp.json');
+    const cursorConfig = path.join(dir, 'cursor.json');
+    fs.writeFileSync(
+      codexConfig,
+      `[mcp_servers.loopsteward]\ncommand = "node"\nargs = [${JSON.stringify(serverPath)}]\n`,
+    );
+    const config = { mcpServers: { loopsteward: { command: 'node', args: [serverPath] } } };
+    fs.writeFileSync(claudeConfig, JSON.stringify(config));
+    fs.writeFileSync(cursorConfig, JSON.stringify(config));
+
+    const report = buildLoopDoctor({
+      ...baseOptions(dir, home),
+      codexConfig,
+      claudeConfig,
+      cursorConfig,
+    });
+
+    expect(check(report, 'mcp')).toMatchObject({
+      status: 'ok',
+      detail: expect.stringContaining('codex / claude / cursor'),
+    });
+  });
+
+  it('warns when a configured server path is missing', () => {
+    const dir = tempDir('mcp-missing');
+    const home = path.join(dir, 'home');
+    const codexConfig = path.join(dir, 'codex.toml');
+    fs.writeFileSync(
+      codexConfig,
+      `[mcp_servers.loopsteward]\ncommand = "node"\nargs = [${JSON.stringify(
+        path.join(dir, 'missing.js'),
+      )}]\n`,
+    );
+
+    const report = buildLoopDoctor({ ...baseOptions(dir, home), codexConfig });
+
+    expect(check(report, 'mcp')).toMatchObject({
+      status: 'warn',
+      detail: expect.stringContaining('server 路径不存在'),
+    });
   });
 });
 

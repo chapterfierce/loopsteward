@@ -38,6 +38,70 @@ function seed(
   return loop;
 }
 
+function seedAssistant(
+  store: LoopStore,
+  project: string,
+  title: string,
+  confidence: number,
+  lastSeen: string,
+) {
+  const signalId = `${project}:${title}:assistant`;
+  store.saveSignal({
+    id: signalId,
+    source: 'session',
+    sourceId: `session-${project}`,
+    messageId: `msg-${title}`,
+    agent: 'codex',
+    role: 'assistant',
+    text: `assistant suggestion ${title}`,
+    projectDir: `C:/work/${project}`,
+    capturedAt: lastSeen,
+    contentHash: `hash-${signalId}`,
+  });
+  return store.saveLoop(
+    {
+      title,
+      nextAction: `next ${title}`,
+      why: `why ${title}`,
+      confidence,
+      sourceSignalIds: [signalId],
+    },
+    { projectDir: `C:/work/${project}`, projectName: project, lastSeen, firstSeen: lastSeen },
+  ).loop;
+}
+
+function seedUser(
+  store: LoopStore,
+  project: string,
+  title: string,
+  confidence: number,
+  lastSeen: string,
+) {
+  const signalId = `${project}:${title}:user`;
+  store.saveSignal({
+    id: signalId,
+    source: 'session',
+    sourceId: `session-${project}`,
+    messageId: `msg-${title}`,
+    agent: 'codex',
+    role: 'user',
+    text: `user request ${title}`,
+    projectDir: `C:/work/${project}`,
+    capturedAt: lastSeen,
+    contentHash: `hash-${signalId}`,
+  });
+  return store.saveLoop(
+    {
+      title,
+      nextAction: `next ${title}`,
+      why: `why ${title}`,
+      confidence,
+      sourceSignalIds: [signalId],
+    },
+    { projectDir: `C:/work/${project}`, projectName: project, lastSeen, firstSeen: lastSeen },
+  ).loop;
+}
+
 describe('buildDigest', () => {
   it('limits the hot digest to 3 loops across recently active projects', () => {
     const store = openStore();
@@ -1087,11 +1151,93 @@ describe('buildDigest', () => {
     expect(result.recap).toEqual([]);
     expect(result.recapFocusEmpty).toBe(true);
     expect(result.focusProject?.backlog).toBe(1);
+    expect(result.focusNextLoop?.title).toBe('G1');
     const text = formatSkillDigest(result);
     expect(text).toContain('本项目今天没有已提过的回访条目');
+    expect(text).toContain('下一条用户待办');
+    expect(text).toContain(`[ref ${loopRef(result.focusNextLoop!.id)}]`);
+    expect(text).toContain('说“做这条”');
     expect(text).toContain('说“周回顾”看清单');
     expect(text).not.toContain('说“收尾”');
     expect(text).not.toContain('今天提过 · 3 条');
+  });
+
+  it('offers one completion candidate when the focus project has no actionable todo', () => {
+    const store = openStore();
+    const now = new Date('2026-11-11T12:00:00.000Z');
+    store.recordProjectActivity('C:/work/alpha', 'alpha', now.toISOString(), 's-a');
+    store.recordProjectActivity('C:/work/beta', 'beta', now.toISOString(), 's-b');
+    store.recordProjectActivity('C:/work/gamma', 'gamma', now.toISOString(), 's-g');
+    const alpha = seed(store, 'alpha', 'A1', 0.9, now.toISOString());
+    const beta = seed(store, 'beta', 'B1', 0.9, now.toISOString());
+    const betaTwo = seed(store, 'beta', 'B2', 0.8, now.toISOString());
+    const gamma = seed(store, 'gamma', 'G1 done', 0.9, now.toISOString());
+    store.recordSurfaced([alpha.id, beta.id, betaTwo.id], now.toISOString());
+    store.recordPresentation([gamma.id], '2026-11-11T11:00:00.000Z', 'hot', 'hot');
+    store.recordPresentation([gamma.id], '2026-11-11T12:30:00.000Z', 'hot', 'candidate');
+    store.setReconcileCache(
+      'dsh:s-gamma',
+      'hash-gamma',
+      [{
+        loopId: gamma.id,
+        confidence: 0.98,
+        reason: '已完成：后续会话明确验证通过',
+        evidenceMessageIds: ['m1'],
+      }],
+      now.toISOString(),
+    );
+
+    const result = buildDigest({
+      store,
+      mode: 'hot',
+      now: new Date('2026-11-11T13:00:00.000Z'),
+      focusProjectDir: 'C:/work/gamma',
+    });
+
+    expect(result.recapFocusEmpty).toBe(true);
+    expect(result.focusNextLoop).toBeUndefined();
+    expect(result.focusCompletionCandidate?.loopId).toBe(gamma.id);
+    const text = formatSkillDigest(result);
+    expect(text).toContain('**可能已完成**');
+    expect(text).toContain(`[ref ${loopRef(gamma.id)}]`);
+    expect(text).toContain('说“关闭这条”确认');
+    expect(text).not.toContain('下一条用户待办');
+    expect(store.getLoop(gamma.id)?.status).toBe('open');
+  });
+
+  it('keeps the empty hot digest short and scannable', () => {
+    const text = formatDigest({
+      mode: 'hot',
+      generatedAt: '2026-11-11T13:00:00.000Z',
+      total: 0,
+      dailyCapReached: true,
+      recapFocusEmpty: true,
+      recap: [],
+      focusProject: {
+        dir: 'C:/work/gamma',
+        name: 'gamma',
+        matched: true,
+        shown: 0,
+        backlog: 1,
+        userBacklog: 1,
+        assistantBacklog: 2,
+      },
+      userActiveTotal: 1,
+      assistantBacklog: 2,
+      closingTotal: 4,
+      focusClosingTotal: 2,
+      focusClosingOrigins: { user: 1, assistant: 1, mixed: 0 },
+      closingOrigins: { user: 2, assistant: 2, mixed: 0 },
+      focusClosingCompletionTotal: 1,
+      closingCompletionTotal: 1,
+      closeCandidates: [],
+    } as unknown as Parameters<typeof formatDigest>[0]);
+
+    expect(text).toContain('# 回访 · 今天 0 条新提醒');
+    expect(text).toContain('本项目今天没有已提过的回访条目');
+    expect(text).toContain('说“周回顾”看清单');
+    expect(text).toContain('只看完成证据');
+    expect(text.split('\n').every((line) => line.length <= 120)).toBe(true);
   });
 
   it('points to the closing review when shown loops remain open', () => {
@@ -1103,9 +1249,11 @@ describe('buildDigest', () => {
     const alpha = seed(store, 'alpha', 'A1', 0.9, now.toISOString());
     const beta = seed(store, 'beta', 'B1', 0.9, now.toISOString());
     const betaTwo = seed(store, 'beta', 'B2', 0.8, now.toISOString());
+    const betaAssistant = seedAssistant(store, 'beta', 'B3', 0.9, now.toISOString());
     const gamma = seed(store, 'gamma', 'G1', 0.9, now.toISOString());
     store.recordSurfaced([alpha.id, beta.id, betaTwo.id], now.toISOString());
     store.recordPresentation([gamma.id], '2026-11-10T12:00:00.000Z', 'hot', 'hot');
+    store.recordPresentation([betaAssistant.id], '2026-11-10T12:00:00.000Z', 'hot', 'hot');
 
     const result = buildDigest({
       store,
@@ -1116,11 +1264,16 @@ describe('buildDigest', () => {
 
     expect(result.total).toBe(0);
     expect(result.recapFocusEmpty).toBe(true);
-    expect(result.closingTotal).toBe(1);
+    expect(result.closingTotal).toBe(2);
     expect(result.focusClosingTotal).toBe(1);
+    expect(result.closingOrigins).toEqual({ user: 0, assistant: 1, mixed: 1 });
+    expect(result.focusClosingOrigins).toEqual({ user: 0, assistant: 0, mixed: 1 });
     const text = formatSkillDigest(result);
-    expect(text).toContain('1 条展示过但未关闭');
-    expect(text).toContain('说“收尾”看清单');
+    expect(text).toContain('本项目另有 1 条展示过但未关闭');
+    expect(text).toContain('用户 0 / 助手 0 / 混合 1');
+    expect(text).not.toContain('用户 0 / 助手 1 / 混合 1');
+    expect(text).toContain('说“收尾本项目”看这 1 条');
+    expect(text).toContain('说“收尾”看全部 2 条');
   });
 
   it('keeps a confirmed cross-project item after the daily cap', () => {
@@ -1377,7 +1530,7 @@ describe('buildDigest', () => {
     expect(text).toContain('后续会话明确验证通过');
   });
 
-  it('does not repeat a completion candidate already shown as a hot item', () => {
+  it('moves a completion candidate that would fill the hot list into the close prompt', () => {
     const store = openStore();
     const now = new Date('2026-11-11T12:00:00.000Z');
     store.recordProjectActivity('C:/work/alpha', 'alpha', now.toISOString(), 's-a');
@@ -1403,7 +1556,9 @@ describe('buildDigest', () => {
       focusProjectDir: 'C:/work/alpha',
     });
 
-    expect(result.closeCandidates).toEqual([]);
+    expect(result.groups.flatMap((group) => group.loops.map((loop) => loop.id))).toEqual([]);
+    expect(result.closeCandidates?.map((item) => item.loopId)).toEqual([shown.id]);
+    expect(formatSkillDigest(result)).toContain('可能已完成');
   });
 
   it('keeps hot completion candidates inside the focus project', () => {
@@ -1961,10 +2116,32 @@ describe('buildDigest', () => {
     expect(second.eligibleTotal).toBe(1);
 
     const output = formatSkillDigest(second);
-    expect(output).toContain('库存还有 4 条未闭环');
+    expect(output).toContain('库存还有 4 条用户待办未闭环');
     expect(output).toContain('要现在看就说“周回顾”');
-    expect(output).not.toContain('库存还有 1 条未闭环');
+    expect(output).not.toContain('库存还有 1 条用户待办未闭环');
     expect(output).toContain('最近活跃：alpha');
+  });
+
+  it('splits temporary-session loops out of the daily inventory', () => {
+    const store = openStore();
+    const now = new Date('2026-11-11T12:00:00.000Z');
+    store.recordProjectActivity('C:/work/alpha', 'alpha', '2026-11-11T11:00:00.000Z', 's1');
+    for (let index = 0; index < 5; index += 1) {
+      seed(store, 'alpha', `A${index}`, 0.9, '2026-11-11T11:00:00.000Z');
+    }
+    for (let index = 0; index < 2; index += 1) {
+      seed(store, 'Qoder · 临时会话', `Q${index}`, 0.9, '2026-11-11T11:00:00.000Z');
+    }
+
+    const first = buildDigest({ store, mode: 'hot', now, maxLoops: 3 });
+    expect(first.total).toBe(3);
+
+    const second = buildDigest({ store, mode: 'hot', now });
+    expect(second.userActiveTotal).toBe(7);
+    expect(second.userActiveSessionOnly).toBe(2);
+    expect(formatSkillDigest(second)).toContain(
+      '库存还有 7 条待办（其中 2 条来自临时会话）未闭环',
+    );
   });
 
   it('renders skill-ready hot items with next action, close hint, and feedback prompt', () => {
@@ -1991,6 +2168,197 @@ describe('buildDigest', () => {
     expect(output).toContain('回复示例');
     expect(output).toContain('哪条是你确实忘了');
     expect(output).toContain('哪条是噪音');
+  });
+
+  it('adds a closing nudge when previous loops were shown but not closed', () => {
+    const store = openStore();
+    const now = new Date('2026-11-11T12:00:00.000Z');
+    store.recordProjectActivity('C:/work/alpha', 'alpha', now.toISOString(), 's1');
+    const shown = seed(store, 'alpha', 'Shown task', 0.9, now.toISOString());
+    seed(store, 'alpha', 'Fresh task', 0.9, now.toISOString());
+    const assistant = seedAssistant(store, 'alpha', 'Assistant shown', 0.9, now.toISOString());
+    store.recordSurfaced([shown.id], now.toISOString());
+    store.recordPresentation([shown.id, assistant.id], now.toISOString(), 'hot', 'hot');
+
+    const result = buildDigest({
+      store,
+      mode: 'hot',
+      now,
+      maxLoops: 1,
+      markSurfaced: false,
+    });
+    const output = formatSkillDigest(result);
+
+    expect(result.total).toBe(1);
+    expect(result.closingTotal).toBe(2);
+    expect(result.closingOrigins).toEqual({ user: 0, assistant: 1, mixed: 1 });
+    expect(output).toContain('另有 2 条展示过但未关闭');
+    expect(output).toContain('用户 0 / 助手 1 / 混合 1');
+    expect(output).toContain('说“收尾”看清单');
+    expect(output).toContain('只看助手建议');
+  });
+
+  it('uses a project-scoped closing nudge when the focus project has shown loops', () => {
+    const store = openStore();
+    const now = new Date('2026-11-11T12:00:00.000Z');
+    store.recordProjectActivity('C:/work/alpha', 'alpha', now.toISOString(), 's-alpha');
+    store.recordProjectActivity('C:/work/beta', 'beta', now.toISOString(), 's-beta');
+    seed(store, 'alpha', 'Alpha fresh', 0.9, now.toISOString());
+    const alphaShown = seed(store, 'alpha', 'Alpha shown', 0.9, now.toISOString());
+    const betaShown = seed(store, 'beta', 'Beta shown', 0.9, now.toISOString());
+    store.recordPresentation(
+      [alphaShown.id, betaShown.id],
+      now.toISOString(),
+      'hot',
+      'hot',
+    );
+
+    const result = buildDigest({
+      store,
+      mode: 'hot',
+      now,
+      maxLoops: 1,
+      focusProjectDir: 'C:/work/alpha',
+      markSurfaced: false,
+    });
+    const output = formatSkillDigest(result);
+
+    expect(result.total).toBe(1);
+    expect(result.focusClosingTotal).toBe(1);
+    expect(result.closingTotal).toBe(2);
+    expect(output).toContain('本项目另有 1 条展示过但未关闭');
+    expect(output).toContain('说“收尾本项目”看这 1 条');
+    expect(output).toContain('说“收尾”看全部 2 条');
+  });
+
+  it('reports global user completion evidence when the focus project is narrower', () => {
+    const store = openStore();
+    const now = new Date('2026-11-11T12:00:00.000Z');
+    store.recordProjectActivity('C:/work/alpha', 'alpha', now.toISOString(), 's-alpha');
+    store.recordProjectActivity('C:/work/beta', 'beta', now.toISOString(), 's-beta');
+    seed(store, 'alpha', 'Alpha fresh', 0.9, now.toISOString());
+    const alphaShown = seedUser(store, 'alpha', 'Alpha shown', 0.9, now.toISOString());
+    const betaDone = seedUser(store, 'beta', 'Beta done', 0.8, now.toISOString());
+    store.setReconcileCache(
+      'dsh:s-beta',
+      'hash-beta',
+      [{
+        loopId: betaDone.id,
+        confidence: 0.95,
+        reason: 'beta item verified',
+        evidenceMessageIds: ['m-beta'],
+      }],
+      now.toISOString(),
+    );
+    store.recordPresentation(
+      [alphaShown.id, betaDone.id],
+      now.toISOString(),
+      'hot',
+      'hot',
+    );
+
+    const result = buildDigest({
+      store,
+      mode: 'hot',
+      now,
+      maxLoops: 1,
+      focusProjectDir: 'C:/work/alpha',
+      markSurfaced: false,
+    });
+    const output = formatSkillDigest(result);
+
+    expect(result.focusClosingTotal).toBe(1);
+    expect(result.closingTotal).toBe(2);
+    expect(result.closingCompletionOrigins).toEqual({ user: 1, assistant: 0, mixed: 0 });
+    expect(output).toContain('说“收尾”看全部 2 条（其中用户 1 条有完成证据）');
+  });
+
+  it('adds the closing nudge to the weekly review with completion evidence', () => {
+    const store = openStore();
+    const now = new Date('2026-11-11T12:00:00.000Z');
+    store.recordProjectActivity('C:/work/alpha', 'alpha', now.toISOString(), 's-alpha');
+    const shown = seed(store, 'alpha', 'Still open', 0.95, now.toISOString());
+    const candidate = seed(store, 'alpha', 'Looks done', 0.7, now.toISOString());
+    store.setReconcileCache(
+      'dsh:s-alpha',
+      'hash-alpha',
+      [{
+        loopId: candidate.id,
+        confidence: 0.95,
+        reason: '已完成：后续会话明确复跑并通过验证',
+        evidenceMessageIds: ['m1'],
+      }],
+      now.toISOString(),
+    );
+    store.recordPresentation([shown.id, candidate.id], now.toISOString(), 'hot', 'hot');
+
+    const result = buildDigest({
+      store,
+      mode: 'review',
+      now,
+      maxLoops: 1,
+      markSurfaced: false,
+    });
+    const output = formatDigest(result);
+    const skillOutput = formatSkillDigest(result);
+
+    expect(result.closingTotal).toBe(2);
+    expect(result.closingCompletionTotal).toBe(1);
+    expect(result.reconcileCandidates.map((item) => item.loopId)).toEqual([candidate.id]);
+    expect(output).toContain('可能已完成');
+    expect(output).toContain('收尾清单共 2 条展示过但未关闭');
+    expect(output).toContain('展示过但未关闭');
+    expect(output).toContain('其中 1 条已有完成证据');
+    expect(skillOutput).toContain('其中 1 条已有完成证据');
+    expect(output).toContain('只看完成证据');
+    expect(skillOutput).toContain('只看完成证据');
+  });
+
+  it('breaks down completion evidence by origin and points to my completion items', () => {
+    const store = openStore();
+    const now = new Date('2026-11-11T12:00:00.000Z');
+    store.recordProjectActivity('C:/work/alpha', 'alpha', now.toISOString(), 's-alpha');
+    const openLoop = seed(store, 'alpha', 'Still open', 0.9, now.toISOString());
+    const userLoop = seedUser(store, 'alpha', 'User finish', 0.8, now.toISOString());
+    const assistantLoop = seedAssistant(store, 'alpha', 'Assistant finish', 0.8, now.toISOString());
+    store.setReconcileCache(
+      'dsh:s-alpha',
+      'hash-origin',
+      [
+        {
+          loopId: userLoop.id,
+          confidence: 0.95,
+          reason: 'user item verified',
+          evidenceMessageIds: ['m-user'],
+        },
+        {
+          loopId: assistantLoop.id,
+          confidence: 0.93,
+          reason: 'assistant item verified',
+          evidenceMessageIds: ['m-assistant'],
+        },
+      ],
+      now.toISOString(),
+    );
+    store.recordPresentation(
+      [openLoop.id, userLoop.id, assistantLoop.id],
+      now.toISOString(),
+      'hot',
+      'hot',
+    );
+
+    const result = buildDigest({
+      store,
+      mode: 'review',
+      now,
+      maxLoops: 1,
+      markSurfaced: false,
+    });
+    const output = formatDigest(result);
+
+    expect(result.closingCompletionOrigins).toEqual({ user: 1, assistant: 1, mixed: 0 });
+    expect(output).toContain('用户 1 条');
+    expect(output).toContain('只看我的完成项');
   });
 
   it('numbers every surfaced item so 回编号 is actionable', () => {
@@ -2545,11 +2913,228 @@ describe('buildDigest', () => {
     expect(store.getLoop(candidate.id)?.status).toBe('open');
   });
 
+  it('moves a high-confidence completion candidate out of the hot list', () => {
+    const store = openStore();
+    const now = new Date('2026-11-11T12:00:00.000Z');
+    store.recordProjectActivity('C:/work/alpha', 'alpha', now.toISOString(), 's-alpha');
+    const done = seed(store, 'alpha', 'Looks done', 0.7, now.toISOString());
+    const open = seed(store, 'alpha', 'Still open', 0.95, now.toISOString());
+    store.setReconcileCache(
+      'dsh:s-alpha',
+      'hash-alpha',
+      [{
+        loopId: done.id,
+        confidence: 0.95,
+        reason: '已完成：后续会话明确复跑并通过验证',
+        evidenceMessageIds: ['m1'],
+      }],
+      now.toISOString(),
+    );
+
+    const result = buildDigest({
+      store,
+      mode: 'hot',
+      now,
+      maxLoops: 3,
+      markSurfaced: false,
+    });
+    const hotIds = result.groups.flatMap((group) => group.loops.map((loop) => loop.id));
+
+    expect(hotIds).toEqual([open.id]);
+    expect(result.closeCandidates?.map((item) => item.loopId)).toEqual([done.id]);
+    const output = formatDigest(result);
+    expect(output).toContain('可能已完成');
+    expect(output).toContain('Looks done');
+  });
+
+  it('renders a completion-only hot digest when no other loops need a visit', () => {
+    const store = openStore();
+    const now = new Date('2026-11-11T12:00:00.000Z');
+    store.recordProjectActivity('C:/work/alpha', 'alpha', now.toISOString(), 's-alpha');
+    const done = seed(store, 'alpha', 'Only done', 0.7, now.toISOString());
+    store.recordPresentation([done.id], '2026-11-11T11:00:00.000Z', 'review', 'review');
+    store.setReconcileCache(
+      'dsh:s-alpha',
+      'hash-alpha',
+      [{
+        loopId: done.id,
+        confidence: 0.95,
+        reason: '已完成：后续会话明确复跑并通过验证',
+        evidenceMessageIds: ['m1'],
+      }],
+      now.toISOString(),
+    );
+
+    const result = buildDigest({
+      store,
+      mode: 'hot',
+      now,
+      maxLoops: 3,
+      markSurfaced: false,
+    });
+
+    expect(result.total).toBe(0);
+    expect(result.closeCandidates?.map((item) => item.loopId)).toEqual([done.id]);
+    const output = formatSkillDigest(result);
+    expect(output).toContain('# 回访 · 0 条');
+    expect(output).toContain('可能已完成');
+    expect(output).not.toContain('没有需要回访的循环');
+  });
+
+  it('puts assistant suggestions behind user loops in hot', () => {
+    const store = openStore();
+    const now = new Date('2026-11-11T12:00:00.000Z');
+    store.recordProjectActivity('C:/work/alpha', 'alpha', now.toISOString(), 's-alpha');
+    const assistant = seedAssistant(store, 'alpha', 'Assistant suggestion', 0.95, now.toISOString());
+    const users = [
+      seed(store, 'alpha', 'User task 1', 0.95, now.toISOString()),
+      seed(store, 'alpha', 'User task 2', 0.95, now.toISOString()),
+      seed(store, 'alpha', 'User task 3', 0.95, now.toISOString()),
+    ];
+
+    const result = buildDigest({
+      store,
+      mode: 'hot',
+      now,
+      maxLoops: 3,
+      markSurfaced: false,
+    });
+    const hotIds = result.groups.flatMap((group) => group.loops.map((loop) => loop.id));
+
+    expect(hotIds).toEqual(users.map((loop) => loop.id));
+    expect(hotIds).not.toContain(assistant.id);
+  });
+
+  it('fills one leftover hot slot with a high-confidence assistant suggestion', () => {
+    const store = openStore();
+    const now = new Date('2026-11-11T12:00:00.000Z');
+    store.recordProjectActivity('C:/work/alpha', 'alpha', now.toISOString(), 's-alpha');
+    const user = seed(store, 'alpha', 'User task', 0.95, now.toISOString());
+    const first = seedAssistant(store, 'alpha', 'Assistant one', 0.9, now.toISOString());
+    const second = seedAssistant(store, 'alpha', 'Assistant two', 0.9, now.toISOString());
+
+    const result = buildDigest({
+      store,
+      mode: 'hot',
+      now,
+      maxLoops: 3,
+      markSurfaced: false,
+    });
+    const hotIds = result.groups.flatMap((group) => group.loops.map((loop) => loop.id));
+    const assistantIds = hotIds.filter((id) => id === first.id || id === second.id);
+    const output = formatSkillDigest(result);
+
+    expect(hotIds).toContain(user.id);
+    expect(assistantIds).toHaveLength(1);
+    expect(output).toContain('助手建议');
+  });
+
+  it('does not re-fill an assistant suggestion that was just presented', () => {
+    const store = openStore();
+    const now = new Date('2026-11-11T12:00:00.000Z');
+    store.recordProjectActivity('C:/work/alpha', 'alpha', now.toISOString(), 's-alpha');
+    const assistant = seedAssistant(store, 'alpha', 'Assistant shown', 0.9, now.toISOString());
+    store.recordPresentation(
+      [assistant.id],
+      '2026-11-11T11:00:00.000Z',
+      'review',
+      'teaser',
+    );
+
+    const result = buildDigest({
+      store,
+      mode: 'hot',
+      now,
+      maxLoops: 3,
+      markSurfaced: false,
+    });
+    const hotIds = result.groups.flatMap((group) => group.loops.map((loop) => loop.id));
+
+    expect(hotIds).not.toContain(assistant.id);
+    expect(formatSkillDigest(result)).not.toContain('助手建议');
+  });
+
+  it('keeps unconfirmed assistant loops out of the weekly review teaser', () => {
+    const store = openStore();
+    const now = new Date('2026-11-11T12:00:00.000Z');
+    store.recordProjectActivity('C:/work/gamma', 'gamma', '2026-11-04T10:00:00.000Z', 's-gamma');
+    const user = seed(store, 'gamma', 'User backlog', 0.85, '2026-11-04T10:00:00.000Z');
+    seedAssistant(store, 'gamma', 'Assistant backlog', 0.95, '2026-11-04T10:00:00.000Z');
+
+    const result = buildDigest({
+      store,
+      mode: 'hot',
+      now,
+      maxLoops: 3,
+      markSurfaced: false,
+    });
+
+    expect(result.reviewPick?.id).toBe(user.id);
+  });
+
+  it('lets a user-confirmed assistant loop back into hot', () => {
+    const store = openStore();
+    const now = new Date('2026-11-11T12:00:00.000Z');
+    store.recordProjectActivity('C:/work/alpha', 'alpha', now.toISOString(), 's-alpha');
+    const assistant = seedAssistant(store, 'alpha', 'Assistant suggestion', 0.95, now.toISOString());
+    store.recordFeedback(assistant.id, 'forgotten', '确实有用', now.toISOString());
+
+    const result = buildDigest({
+      store,
+      mode: 'hot',
+      now,
+      maxLoops: 3,
+      markSurfaced: false,
+    });
+    const hotIds = result.groups.flatMap((group) => group.loops.map((loop) => loop.id));
+
+    expect(hotIds).toContain(assistant.id);
+  });
+
+  it('separates assistant-only backlog from the user inventory', () => {
+    const store = openStore();
+    const now = new Date('2026-11-11T12:00:00.000Z');
+    store.recordProjectActivity('C:/work/alpha', 'alpha', now.toISOString(), 's-alpha');
+    seed(store, 'alpha', 'User task', 0.9, now.toISOString());
+    seedAssistant(store, 'alpha', 'Assistant suggestion', 0.9, now.toISOString());
+
+    const result = buildDigest({
+      store,
+      mode: 'hot',
+      now,
+      markSurfaced: false,
+    });
+
+    expect(result.activeTotal).toBe(2);
+    expect(result.userActiveTotal).toBe(1);
+    expect(result.assistantBacklog).toBe(1);
+  });
+
+  it('reports assistant-only inventory instead of claiming there is nothing to revisit', () => {
+    const store = openStore();
+    const now = new Date('2026-11-11T12:00:00.000Z');
+    store.recordProjectActivity('C:/work/alpha', 'alpha', now.toISOString(), 's-alpha');
+    seedAssistant(store, 'alpha', 'Assistant suggestion', 0.7, now.toISOString());
+
+    const result = buildDigest({
+      store,
+      mode: 'hot',
+      now,
+      markSurfaced: false,
+    });
+    const output = formatDigest(result);
+
+    expect(result.total).toBe(0);
+    expect(output).toContain('没有需要回访的用户循环');
+    expect(output).toContain('另有 1 条助手来源待确认');
+  });
+
   it('ignores stale reconcile candidates', () => {
     const store = openStore();
     const now = new Date('2026-11-11T12:00:00.000Z');
     store.recordProjectActivity('C:/work/alpha', 'alpha', now.toISOString(), 's-alpha');
-    const candidate = seed(store, 'alpha', 'Old candidate', 0.7, '2026-11-01T12:00:00.000Z');
+    seed(store, 'alpha', 'Fresh task', 0.95, now.toISOString());
+    const candidate = seed(store, 'alpha', 'Old candidate', 0.7, '2026-10-01T12:00:00.000Z');
     store.setReconcileCache(
       'dsh:s-alpha',
       'hash-alpha',
@@ -2559,6 +3144,36 @@ describe('buildDigest', () => {
         reason: '已完成：旧核对',
         evidenceMessageIds: ['m1'],
       }],
+      '2026-10-01T12:00:00.000Z',
+    );
+
+    const result = buildDigest({
+      store,
+      mode: 'review',
+      now,
+      maxLoops: 1,
+      markSurfaced: false,
+    });
+
+    expect(result.reconcileCandidates).toEqual([]);
+    expect(formatDigest(result)).not.toContain('可能已完成');
+  });
+
+  it('shows a completion candidate older than 24 hours in the weekly review', () => {
+    const store = openStore();
+    const now = new Date('2026-11-11T12:00:00.000Z');
+    store.recordProjectActivity('C:/work/alpha', 'alpha', now.toISOString(), 's-alpha');
+    seed(store, 'alpha', 'Fresh task', 0.95, now.toISOString());
+    const candidate = seed(store, 'alpha', 'Ten day old candidate', 0.7, '2026-11-01T12:00:00.000Z');
+    store.setReconcileCache(
+      'dsh:s-alpha',
+      'hash-alpha',
+      [{
+        loopId: candidate.id,
+        confidence: 0.95,
+        reason: '已完成：十天前已复跑通过',
+        evidenceMessageIds: ['m1'],
+      }],
       '2026-11-01T12:00:00.000Z',
     );
 
@@ -2566,11 +3181,79 @@ describe('buildDigest', () => {
       store,
       mode: 'review',
       now,
+      maxLoops: 1,
+      markSurfaced: false,
+    });
+    const output = formatDigest(result);
+
+    expect(result.reconcileCandidates.map((item) => item.loopId)).toEqual([candidate.id]);
+    expect(output).toContain('可能已完成');
+    expect(output).toContain('Ten day old candidate');
+  });
+
+  it('keeps completion candidates out of the weekly review list', () => {
+    const store = openStore();
+    const now = new Date('2026-11-11T12:00:00.000Z');
+    store.recordProjectActivity('C:/work/alpha', 'alpha', now.toISOString(), 's-alpha');
+    const shown = seed(store, 'alpha', 'Still open', 0.95, now.toISOString());
+    const candidate = seed(store, 'alpha', 'Looks done', 0.7, now.toISOString());
+    store.setReconcileCache(
+      'dsh:s-alpha',
+      'hash-alpha',
+      [{
+        loopId: candidate.id,
+        confidence: 0.95,
+        reason: '已完成：后续会话已复跑通过',
+        evidenceMessageIds: ['m1'],
+      }],
+      now.toISOString(),
+    );
+
+    const result = buildDigest({
+      store,
+      mode: 'review',
+      now,
+      maxLoops: 2,
       markSurfaced: false,
     });
 
-    expect(result.reconcileCandidates).toEqual([]);
-    expect(formatDigest(result)).not.toContain('可能已完成');
+    expect(result.groups.flatMap((group) => group.loops.map((loop) => loop.id)))
+      .toEqual([shown.id]);
+    expect(result.reconcileCandidates.map((item) => item.loopId)).toEqual([candidate.id]);
+    expect(result.reviewRemaining).toBe(0);
+  });
+
+  it('keeps completion candidates out of the hot review teaser', () => {
+    const store = openStore();
+    const now = new Date('2026-11-11T12:00:00.000Z');
+    store.recordProjectActivity(
+      'C:/work/gamma',
+      'gamma',
+      '2026-11-04T10:00:00.000Z',
+      's-gamma',
+    );
+    const candidate = seed(store, 'gamma', 'Old candidate', 0.85, '2026-11-04T10:00:00.000Z');
+    store.setReconcileCache(
+      'dsh:s-gamma',
+      'hash-gamma',
+      [{
+        loopId: candidate.id,
+        confidence: 0.95,
+        reason: '已完成：七天前已复跑通过',
+        evidenceMessageIds: ['m1'],
+      }],
+      now.toISOString(),
+    );
+
+    const result = buildDigest({
+      store,
+      mode: 'hot',
+      now,
+      markSurfaced: false,
+    });
+
+    expect(result.reviewPick).toBeUndefined();
+    expect(result.closeCandidates?.map((item) => item.loopId)).toEqual([candidate.id]);
   });
 
   it('does not show snoozed reconcile candidates', () => {

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -15,10 +16,23 @@ import { buildClosingReview } from '../loops/closing.js';
 import { loopRef } from '../loops/loop-ref.js';
 import { LoopStore } from '../loops/loop-store.js';
 import { resolveDefaultDbPath } from '../loops/data-path.js';
-import type { LoopRecord, LoopStatus } from '../loops/types.js';
+import { findPackageRoot } from '../loops/package-root.js';
+import type { LoopOrigin, LoopRecord, LoopStatus } from '../loops/types.js';
 
 const SERVER_NAME = 'loopsteward';
-const SERVER_VERSION = '2.9.0';
+const SERVER_VERSION = readServerVersion();
+
+function readServerVersion(): string {
+  try {
+    const root = findPackageRoot();
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(root, 'package.json'), 'utf8'),
+    ) as { version?: string };
+    return manifest.version ?? '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
+}
 
 const READ_ONLY_ANNOTATIONS = {
   readOnlyHint: true,
@@ -107,13 +121,22 @@ const TOOLS: Tool[] = [
   {
     name: 'loops_closing',
     description:
-      'List loops that were already shown but never closed, ordered by presentation count. Read-only; never changes loop state.',
+      'List loops that were already shown but never closed, ordered by presentation count. Optionally filter by project, origin, or completion evidence. Read-only; never changes loop state.',
     inputSchema: {
       type: 'object',
       properties: {
         projectDir: {
           type: 'string',
           description: 'Absolute project directory filter. Omit to include all projects.',
+        },
+        origin: {
+          type: 'string',
+          enum: ['user', 'assistant', 'mixed'],
+          description: 'Filter by loop origin: user commitments, assistant suggestions, or mixed evidence.',
+        },
+        completionOnly: {
+          type: 'boolean',
+          description: 'Only return items that already have high-confidence completion evidence.',
         },
         limit: {
           type: 'number',
@@ -171,12 +194,24 @@ function readNumber(args: Record<string, unknown>, key: string): number | undefi
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
+function readBoolean(args: Record<string, unknown>, key: string): boolean | undefined {
+  const value = args[key];
+  return typeof value === 'boolean' ? value : undefined;
+}
+
 function readStatus(args: Record<string, unknown>): LoopStatus | 'all' | undefined {
   const value = readString(args, 'status');
   if (!value) return undefined;
   if (value === 'all') return 'all';
   if ((STATUS_VALUES as string[]).includes(value)) return value as LoopStatus;
   throw new Error(`invalid status: ${value}; expected ${[...STATUS_VALUES, 'all'].join(', ')}`);
+}
+
+function readOrigin(args: Record<string, unknown>): LoopOrigin | undefined {
+  const value = readString(args, 'origin');
+  if (!value) return undefined;
+  if (value === 'user' || value === 'assistant' || value === 'mixed') return value;
+  throw new Error(`invalid origin: ${value}; expected user, assistant, mixed`);
 }
 
 function loopPayload(loop: LoopRecord) {
@@ -306,12 +341,18 @@ function getTool(store: LoopStore, args: Record<string, unknown>): CallToolResul
 
 function closingTool(store: LoopStore, args: Record<string, unknown>): CallToolResult {
   const projectDir = readString(args, 'projectDir');
+  const origin = readOrigin(args);
+  const completionOnly = readBoolean(args, 'completionOnly') === true;
   const limit = clamp(Math.floor(readNumber(args, 'limit') ?? 10), 1, 20);
-  const review = buildClosingReview({ store, projectDir, limit });
+  const review = buildClosingReview({ store, projectDir, limit, origin, completionOnly });
   return textResult({
     projectDir: projectDir ? path.resolve(projectDir) : null,
+    origin: review.origin ?? null,
+    completionOnly: Boolean(review.completionOnly),
+    originTotals: review.originTotals,
     total: review.total,
     shown: review.shown,
+    completionTotal: review.completionTotal,
     items: review.items.map((item) => ({
       ...item,
       ref: loopRef(item.id),

@@ -84,4 +84,15 @@ describe.skipIf(process.platform !== 'win32')('open-loops.ps1', () => {
     expect((JSON.parse(result.stdout) as { argv: string[] }).argv)
       .not.toContain('--project');
   });
+
+  it('resolves a relative project filter for closing to the caller cwd', () => {
+    const { wrapper, caller } = createWrapperFixture();
+    const result = runWrapper(wrapper, caller, ['closing', '--project', '.', '--limit', '3']);
+    expect(result.status).toBe(0);
+    const payload = JSON.parse(result.stdout) as { argv: string[]; cwd: string };
+    const projectIndex = payload.argv.indexOf('--project');
+    expect(projectIndex).toBeGreaterThanOrEqual(0);
+    expect(fs.statSync(payload.argv[projectIndex + 1]).ino).toBe(fs.statSync(caller).ino);
+    expect(fs.statSync(payload.cwd).ino).toBe(fs.statSync(path.dirname(path.dirname(wrapper))).ino);
+  });
 });

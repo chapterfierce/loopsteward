@@ -16,6 +16,11 @@ import { buildProjectOverview, formatProjectOverview } from './projects.js';
 import { buildLoopDetail, formatLoopDetail } from './detail.js';
 import { buildClosingReview, formatClosingReview } from './closing.js';
 import {
+  applySessionArchive,
+  buildSessionArchivePlan,
+  formatSessionArchivePlan,
+} from './session-archive.js';
+import {
   isNoiseSuppressed,
   recordLoopFeedback,
   recordLoopFeedbackBatch,
@@ -43,7 +48,7 @@ import {
   formatPresentationRepairReport,
 } from './presentations.js';
 import { resolveDefaultDbPath } from './data-path.js';
-import type { LoopRecord, LoopStatus, ReconcileSummary } from './types.js';
+import type { LoopOrigin, LoopRecord, LoopStatus, ReconcileSummary } from './types.js';
 
 const STATUSES: LoopStatus[] = ['open', 'pending', 'snoozed', 'resolved', 'dropped'];
 
@@ -80,7 +85,8 @@ function usage(): string {
     '  loopsteward install-mcp [--agents codex,claude,cursor] [--project-dir <dir>] [--dry-run] [--uninstall] [--json]',
     '  loopsteward setup [--agents codex,claude,qoder,workbuddy,hermes,antigravity] [--schedule] [--ingest] [--import-db <path>] [--dry-run] [--json]',
     '  loopsteward calibrate [--limit 5] [--db <path>] [--json]',
-    '  loopsteward closing [--limit 10] [--project <dir>] [--db <path>] [--json]',
+    '  loopsteward closing [--limit 10] [--origin user|assistant|mixed] [--completion] [--project <dir>] [--db <path>] [--json]',
+    '  loopsteward archive-sessions [--days 7] [--limit 20] [--apply] [--db <path>] [--json]',
   ].join('\n');
 }
 
@@ -89,6 +95,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   const flags = new Map<string, string | true>();
   const valueFlags = new Set([
     '--days', '--settle-minutes', '--limit', '--db', '--model', '--status', '--project',
+    '--origin',
     '--id', '--ref', '--refs', '--match', '--index', '--note', '--snooze-until', '--snooze-hours', '--home', '--codex-root', '--claude-root',
     '--claude-desktop-root', '--qoder-db',
     '--zcode-db', '--workbuddy-root', '--hermes-db', '--dsh-root', '--magpie-cache',
@@ -104,7 +111,7 @@ function parseArgs(argv: string[]): ParsedArgs {
 
   for (let index = 0; index < rest.length; index += 1) {
     const arg = rest[index];
-    if (arg === '--json' || arg === '--skill' || arg === '--help' || arg === '-h' || arg === '--review' || arg === '--no-mark' || arg === '--force' || arg === '--apply' || arg === '--apply-weak' || arg === '--apply-self-generated' || arg === '--readonly-fallback' || arg === '--shown' || arg === '--all' || arg === '--refresh' || arg === '--no-second-look' || arg === '--dry-run' || arg === '--uninstall' || arg === '--schedule' || arg === '--ingest' || arg === '--no-project-focus') {
+    if (arg === '--json' || arg === '--skill' || arg === '--help' || arg === '-h' || arg === '--review' || arg === '--no-mark' || arg === '--force' || arg === '--apply' || arg === '--apply-weak' || arg === '--apply-self-generated' || arg === '--readonly-fallback' || arg === '--shown' || arg === '--all' || arg === '--refresh' || arg === '--no-second-look' || arg === '--dry-run' || arg === '--uninstall' || arg === '--schedule' || arg === '--ingest' || arg === '--no-project-focus' || arg === '--completion') {
       flags.set(arg, true);
       continue;
     }
@@ -129,6 +136,13 @@ function flagNumber(flags: Map<string, string | true>, name: string): number | u
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) throw new Error(`${name} must be a number`);
   return parsed;
+}
+
+function flagOrigin(flags: Map<string, string | true>, name: string): LoopOrigin | undefined {
+  const value = flagString(flags, name);
+  if (value === undefined) return undefined;
+  if (value === 'user' || value === 'assistant' || value === 'mixed') return value;
+  throw new Error(`${name} must be user, assistant, or mixed`);
 }
 
 export function formatLoops(loops: LoopRecord[]): string {
@@ -288,11 +302,47 @@ function runClosing(flags: Map<string, string | true>): number {
       store,
       limit: flagNumber(flags, '--limit'),
       projectDir: flagString(flags, '--project'),
+      origin: flagOrigin(flags, '--origin'),
+      completionOnly: flags.has('--completion'),
     });
     if (flags.has('--json')) {
       console.log(JSON.stringify(review, null, 2));
     } else {
       console.log(formatClosingReview(review));
+    }
+    return 0;
+  } finally {
+    store.close();
+  }
+}
+
+function runArchiveSessions(flags: Map<string, string | true>): number {
+  const store = new LoopStore(flagString(flags, '--db') ?? resolveDefaultDbPath());
+  try {
+    const plan = buildSessionArchivePlan({
+      store,
+      days: flagNumber(flags, '--days'),
+      limit: flagNumber(flags, '--limit'),
+    });
+    const applied = flags.has('--apply') ? applySessionArchive(store, plan) : undefined;
+    if (flags.has('--json')) {
+      console.log(
+        JSON.stringify(
+          { ...plan, applied: applied?.archived ?? 0, appliedRemaining: applied?.remaining ?? 0 },
+          null,
+          2,
+        ),
+      );
+    } else {
+      console.log(formatSessionArchivePlan(plan));
+      if (applied) {
+        console.log(`\n已归档 ${applied.archived} 条为 dropped。`);
+        if (applied.remaining > 0) {
+          console.log(`还有 ${applied.remaining} 条未处理；调大 --limit 或再跑一次。`);
+        }
+      } else if (plan.total > 0) {
+        console.log('\n未写库；确认后加 --apply。');
+      }
     }
     return 0;
   } finally {
@@ -1097,6 +1147,7 @@ async function main(argv: string[]): Promise<number> {
   if (command === 'digest') return runDigest(flags);
   if (command === 'calibrate') return runCalibrate(flags);
   if (command === 'closing') return runClosing(flags);
+  if (command === 'archive-sessions') return runArchiveSessions(flags);
   if (command === 'reconcile') return runReconcile(flags);
   if (command === 'stats') return runStats(flags);
   if (command === 'doctor') return runDoctor(flags);
