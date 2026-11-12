@@ -1089,6 +1089,7 @@ describe('buildDigest', () => {
     expect(result.focusProject?.backlog).toBe(1);
     const text = formatSkillDigest(result);
     expect(text).toContain('本项目今天没有已提过的回访条目');
+    expect(text).toContain('说“周回顾”看清单');
     expect(text).not.toContain('今天提过 · 3 条');
   });
 
@@ -1931,6 +1932,7 @@ describe('buildDigest', () => {
 
     const output = formatSkillDigest(second);
     expect(output).toContain('库存还有 4 条未闭环');
+    expect(output).toContain('要现在看就说“周回顾”');
     expect(output).not.toContain('库存还有 1 条未闭环');
     expect(output).toContain('最近活跃：alpha');
   });

@@ -1144,20 +1144,20 @@ export function formatDigest(result: DigestResult, now = new Date(result.generat
         if (result.recapFocusEmpty) {
           const backlog = result.focusProject?.backlog ?? result.activeTotal;
           return backlog > 0
-            ? `本项目今天没有已提过的回访条目；本项目还有 ${backlog} 条未闭环。`
+            ? `本项目今天没有已提过的回访条目；本项目还有 ${backlog} 条未闭环。说“周回顾”看清单。`
             : '本项目今天没有已提过的回访条目；本项目暂无未闭环。';
         }
         if (result.activeTotal === 0) {
           return `今天已有 ${result.dailySurfaced} 条回访记录（每日上限 ${result.dailySurfaceLimit} 条）。`;
         }
-        return `今天已有 ${result.dailySurfaced} 条回访记录（每日上限 ${result.dailySurfaceLimit} 条）；库存还有 ${result.activeTotal} 条未闭环，明天再继续。`;
+        return `今天已有 ${result.dailySurfaced} 条回访记录（每日上限 ${result.dailySurfaceLimit} 条）；库存还有 ${result.activeTotal} 条未闭环，明天再继续；要现在看就说“周回顾”。`;
       }
       if (result.activeTotal === 0) return '没有需要回访的循环。';
       if (result.coolingDown > 0) {
         const noise = result.noiseSuppressed > 0
           ? `，${result.noiseSuppressed} 条已标记为噪音`
           : '';
-        return `今天已回访过；还有 ${result.activeTotal} 条未闭环（${result.coolingDown} 条在 24 小时冷却中${noise}），不重复提醒。`;
+        return `今天已回访过；还有 ${result.activeTotal} 条未闭环（${result.coolingDown} 条在 24 小时冷却中${noise}），不重复提醒；要现在看就说“周回顾”。`;
       }
       if (result.noiseSuppressed > 0) {
         return `还有 ${result.activeTotal} 条未闭环，其中 ${result.noiseSuppressed} 条已被标记为噪音且没有新证据，当前不回访。`;
@@ -1392,7 +1392,7 @@ export function formatRecap(result: DigestResult): string {
     }
     lines.push(
       '',
-      `今天 ${result.dailySurfaceLimit} 条新回访已用完；这几条不占新预算。库存还有 ${result.activeTotal} 条未闭环。`,
+      `今天 ${result.dailySurfaceLimit} 条新回访已用完；这几条不占新预算。库存还有 ${result.activeTotal} 条未闭环。要现在看就说“周回顾”。`,
     );
     return lines.join('\n');
   }
@@ -1441,7 +1441,7 @@ export function formatRecap(result: DigestResult): string {
   }
   lines.push(
     '',
-    `今天 ${result.dailySurfaceLimit} 条新回访已用完；这几条不占新预算。库存还有 ${result.activeTotal} 条未闭环。`,
+    `今天 ${result.dailySurfaceLimit} 条新回访已用完；这几条不占新预算。库存还有 ${result.activeTotal} 条未闭环。要现在看就说“周回顾”。`,
     '',
     '哪条已经完成、哪条是你确实忘了、哪条是噪音？回编号或 ref 就行。',
     '回复示例：“1 忘了”“2 噪音”“3 已完成”；要细节就回编号。',
