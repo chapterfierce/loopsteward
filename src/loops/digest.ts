@@ -433,6 +433,8 @@ export function buildDigest(options: DigestOptions = {}): DigestResult {
       store.listProjectActivity(undefined, 300).map((item) => [item.projectDir, item]),
     );
     const activeLoops = store.listActiveLoops();
+    const presentedLoops = store.getPresentationStats(now.toISOString());
+    const closingTotal = activeLoops.filter((loop) => presentedLoops.has(loop.id)).length;
     const latestFeedback = new Map(
       store.getLatestFeedback().map((feedback) => [feedback.loopId, feedback]),
     );
@@ -474,6 +476,10 @@ export function buildDigest(options: DigestOptions = {}): DigestResult {
     const focusBacklog = focusKey !== undefined
       ? activeLoops.filter((loop) => pathKey(loop.projectDir) === focusKey).length
       : 0;
+    const focusClosingTotal = focusKey !== undefined
+      ? activeLoops.filter((loop) =>
+        pathKey(loop.projectDir) === focusKey && presentedLoops.has(loop.id)).length
+      : undefined;
     const coolingCandidates = actionableLoops.filter((loop) =>
       !isSnoozed(loop, nowMs)
       && (mode === 'review' || loop.confidence >= 0.6),
@@ -1022,6 +1028,8 @@ export function buildDigest(options: DigestOptions = {}): DigestResult {
       reviewConfirmed,
       recapThrottled,
       recapFocusEmpty,
+      closingTotal,
+      focusClosingTotal,
       recapCooldownMinutes,
       total: ids.length,
       activeTotal: activeLoops.length,
@@ -1144,20 +1152,20 @@ export function formatDigest(result: DigestResult, now = new Date(result.generat
         if (result.recapFocusEmpty) {
           const backlog = result.focusProject?.backlog ?? result.activeTotal;
           return backlog > 0
-            ? `本项目今天没有已提过的回访条目；本项目还有 ${backlog} 条未闭环。说“周回顾”看清单。`
+            ? `本项目今天没有已提过的回访条目；本项目还有 ${backlog} 条未闭环。说“周回顾”看清单。${closingHint(result, result.focusClosingTotal ?? result.closingTotal)}`
             : '本项目今天没有已提过的回访条目；本项目暂无未闭环。';
         }
         if (result.activeTotal === 0) {
           return `今天已有 ${result.dailySurfaced} 条回访记录（每日上限 ${result.dailySurfaceLimit} 条）。`;
         }
-        return `今天已有 ${result.dailySurfaced} 条回访记录（每日上限 ${result.dailySurfaceLimit} 条）；库存还有 ${result.activeTotal} 条未闭环，明天再继续；要现在看就说“周回顾”。`;
+        return `今天已有 ${result.dailySurfaced} 条回访记录（每日上限 ${result.dailySurfaceLimit} 条）；库存还有 ${result.activeTotal} 条未闭环，明天再继续；${closingHint(result)}要现在看就说“周回顾”。`;
       }
       if (result.activeTotal === 0) return '没有需要回访的循环。';
       if (result.coolingDown > 0) {
         const noise = result.noiseSuppressed > 0
           ? `，${result.noiseSuppressed} 条已标记为噪音`
           : '';
-        return `今天已回访过；还有 ${result.activeTotal} 条未闭环（${result.coolingDown} 条在 24 小时冷却中${noise}），不重复提醒；要现在看就说“周回顾”。`;
+        return `今天已回访过；还有 ${result.activeTotal} 条未闭环（${result.coolingDown} 条在 24 小时冷却中${noise}），不重复提醒；${closingHint(result)}要现在看就说“周回顾”。`;
       }
       if (result.noiseSuppressed > 0) {
         return `还有 ${result.activeTotal} 条未闭环，其中 ${result.noiseSuppressed} 条已被标记为噪音且没有新证据，当前不回访。`;
@@ -1358,6 +1366,12 @@ function formatActiveProjects(projects: ProjectSummary[]): string | undefined {
   return `最近活跃：${parts.join('、')}`;
 }
 
+function closingHint(result: DigestResult, total = result.closingTotal ?? 0): string {
+  return total > 0
+    ? `其中 ${total} 条展示过但未关闭，说“收尾”看清单。`
+    : '';
+}
+
 export function formatRecap(result: DigestResult): string {
   if (result.recapThrottled) {
     const confirmedCount = result.recapConfirmedIds.length;
@@ -1392,7 +1406,7 @@ export function formatRecap(result: DigestResult): string {
     }
     lines.push(
       '',
-      `今天 ${result.dailySurfaceLimit} 条新回访已用完；这几条不占新预算。库存还有 ${result.activeTotal} 条未闭环。要现在看就说“周回顾”。`,
+      `今天 ${result.dailySurfaceLimit} 条新回访已用完；这几条不占新预算。库存还有 ${result.activeTotal} 条未闭环。${closingHint(result)}要现在看就说“周回顾”。`,
     );
     return lines.join('\n');
   }
@@ -1441,7 +1455,7 @@ export function formatRecap(result: DigestResult): string {
   }
   lines.push(
     '',
-    `今天 ${result.dailySurfaceLimit} 条新回访已用完；这几条不占新预算。库存还有 ${result.activeTotal} 条未闭环。要现在看就说“周回顾”。`,
+    `今天 ${result.dailySurfaceLimit} 条新回访已用完；这几条不占新预算。库存还有 ${result.activeTotal} 条未闭环。${closingHint(result)}要现在看就说“周回顾”。`,
     '',
     '哪条已经完成、哪条是你确实忘了、哪条是噪音？回编号或 ref 就行。',
     '回复示例：“1 忘了”“2 噪音”“3 已完成”；要细节就回编号。',

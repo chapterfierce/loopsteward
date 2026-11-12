@@ -1090,7 +1090,37 @@ describe('buildDigest', () => {
     const text = formatSkillDigest(result);
     expect(text).toContain('本项目今天没有已提过的回访条目');
     expect(text).toContain('说“周回顾”看清单');
+    expect(text).not.toContain('说“收尾”');
     expect(text).not.toContain('今天提过 · 3 条');
+  });
+
+  it('points to the closing review when shown loops remain open', () => {
+    const store = openStore();
+    const now = new Date('2026-11-11T12:00:00.000Z');
+    store.recordProjectActivity('C:/work/alpha', 'alpha', now.toISOString(), 's-a');
+    store.recordProjectActivity('C:/work/beta', 'beta', now.toISOString(), 's-b');
+    store.recordProjectActivity('C:/work/gamma', 'gamma', now.toISOString(), 's-g');
+    const alpha = seed(store, 'alpha', 'A1', 0.9, now.toISOString());
+    const beta = seed(store, 'beta', 'B1', 0.9, now.toISOString());
+    const betaTwo = seed(store, 'beta', 'B2', 0.8, now.toISOString());
+    const gamma = seed(store, 'gamma', 'G1', 0.9, now.toISOString());
+    store.recordSurfaced([alpha.id, beta.id, betaTwo.id], now.toISOString());
+    store.recordPresentation([gamma.id], '2026-11-10T12:00:00.000Z', 'hot', 'hot');
+
+    const result = buildDigest({
+      store,
+      mode: 'hot',
+      now: new Date('2026-11-11T13:00:00.000Z'),
+      focusProjectDir: 'C:/work/gamma',
+    });
+
+    expect(result.total).toBe(0);
+    expect(result.recapFocusEmpty).toBe(true);
+    expect(result.closingTotal).toBe(1);
+    expect(result.focusClosingTotal).toBe(1);
+    const text = formatSkillDigest(result);
+    expect(text).toContain('1 条展示过但未关闭');
+    expect(text).toContain('说“收尾”看清单');
   });
 
   it('keeps a confirmed cross-project item after the daily cap', () => {
