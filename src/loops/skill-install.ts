@@ -74,18 +74,18 @@ function contentHash(content: string): string {
   return createHash('sha256').update(content, 'utf8').digest('hex').toUpperCase();
 }
 
-function isWindowsAbsolutePath(value: string): boolean {
-  return /^[A-Za-z]:[\\/]/.test(value) || value.startsWith('\\\\');
-}
-
 export function renderOpenLoopsSkill(source: string, packageRoot: string): string {
   const root = packageRoot;
-  if (!isWindowsAbsolutePath(root)) return source;
-  const scriptPath = path.win32.join(root, 'scripts', 'open-loops.ps1');
-  const refreshScriptPath = path.win32.join(root, 'scripts', 'refresh-open-loops.ps1');
+  const scriptPath = path.join(root, 'scripts', 'open-loops.mjs');
+  const refreshScriptPath = path.join(root, 'scripts', 'refresh-open-loops.ps1');
+  const rendered = source
+    .replaceAll('__LOOPSTEWARD_OPEN_LOOPS_SCRIPT__', scriptPath)
+    .replaceAll('__LOOPSTEWARD_REFRESH_SCRIPT__', refreshScriptPath);
+  if (rendered !== source) return rendered;
+  // Backfill skills installed by older versions that hard-coded a Windows path.
   return source
-    .replace(/[A-Za-z]:[\\/][^"\r\n]*?[\\/]scripts[\\/]open-loops\.ps1/g, scriptPath)
-    .replace(/[A-Za-z]:[\\/][^"\r\n]*?[\\/]scripts[\\/]refresh-open-loops\.ps1/g, refreshScriptPath);
+    .replace(/(?:[A-Za-z]:[\\/]|\/)[^"\r\n]*?[\\/]scripts[\\/]open-loops\.ps1/g, scriptPath)
+    .replace(/(?:[A-Za-z]:[\\/]|\/)[^"\r\n]*?[\\/]scripts[\\/]refresh-open-loops\.ps1/g, refreshScriptPath);
 }
 
 function uniqueBackupPath(target: string, label: string): string {
@@ -203,6 +203,14 @@ export function installOpenLoopsSkillForAgents(
   ) ?? [];
   if (missing.length > 0) {
     throw new Error(`unknown skill agent: ${missing.join(', ')}`);
+  }
+  if (requested) {
+    const unavailable = selected.filter((item) => !fs.existsSync(item.root));
+    if (unavailable.length > 0) {
+      throw new Error(
+        `agent directory not found: ${unavailable.map((item) => `${item.agent} (${item.root})`).join(', ')}; start the agent once, then retry`,
+      );
+    }
   }
   if (selected.length === 0) {
     throw new Error(`no supported skill agent found under ${options.homeDir ?? os.homedir()}`);

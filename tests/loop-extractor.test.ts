@@ -332,6 +332,16 @@ describe('extractLoops', () => {
     expect(chat).toHaveBeenCalledTimes(2);
   });
 
+  it('requires an explicit endpoint when no chat is injected', async () => {
+    await expect(extractLoops(input, { baseUrl: '' })).rejects.toThrow(/LOOPSTEWARD_BASE_URL/);
+  });
+
+  it('requires an explicit model when no chat is injected', async () => {
+    await expect(
+      extractLoops(input, { baseUrl: 'https://api.openai.com/v1', model: '' }),
+    ).rejects.toThrow(/LOOPSTEWARD_MODEL/);
+  });
+
   it('wraps transport errors and retries once', async () => {
     const chat = vi.fn()
       .mockRejectedValueOnce(new Error('ECONNREFUSED'))
@@ -371,7 +381,7 @@ describe('extractResolutions', () => {
     const chat = vi.fn()
       .mockRejectedValueOnce(new LoopExtractionError(
         'transport',
-        'Magpie 返回 HTTP 502: an empty reply (the model answered nothing; try again) — cut at its length, the whole output spent on reasoning',
+        '模型服务返回 HTTP 502: an empty reply (the model answered nothing; try again) — cut at its length, the whole output spent on reasoning',
       ))
       .mockResolvedValueOnce('{"resolved":[]}');
 

@@ -1,6 +1,6 @@
 {
   "on": true,
-  "model": "marvis/deepseek-v4-1-flash-261017",
+  "model": "gpt-4o-mini",
   "done": {
     "claude/s1": "2026-11-10T07:42:50Z",
     "qoder-cn/s3": "2026-11-10T07:26:34Z"

@@ -73,7 +73,7 @@ function tempWorkbuddyErrorFile(): string {
 const now = new Date('2026-11-11T12:00:00.000Z');
 
 describe('coverage report', () => {
-  it('matches Magpie sessions against local discovery and separates unsupported agents', () => {
+  it('matches indexed sessions against local discovery and separates unsupported agents', () => {
     const workbuddyErrorPath = tempWorkbuddyErrorFile();
     const indexPath = tempIndex({
       'C:\\codex\\c1.jsonl': {

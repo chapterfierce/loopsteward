@@ -58,7 +58,7 @@ describe('MagpieSource', () => {
     expect(() => readMagpieMemory(badShape)).toThrow(/memories/);
   });
 
-  it('scans a Magpie home and returns signals plus summary', () => {
+  it('scans a session index home and returns signals plus summary', () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'magpie-home-'));
     fs.copyFileSync(memoryPath, path.join(home, 'memory.json'));
     fs.copyFileSync(distillPath, path.join(home, 'distill.json'));

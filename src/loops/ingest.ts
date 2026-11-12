@@ -162,6 +162,10 @@ export async function ingestRecentSessions(options: IngestOptions = {}): Promise
           confidence: loop.confidence,
           lastSeen: loop.lastSeen,
         }));
+        const llmMessages = session.messages.map((message) => ({
+          ...message,
+          text: redactSecrets(message.text),
+        }));
 
         const extracted = await extract(
           {
@@ -171,7 +175,7 @@ export async function ingestRecentSessions(options: IngestOptions = {}): Promise
               title: session.title,
               projectDir: identity.dir,
             },
-            messages: session.messages,
+            messages: llmMessages,
             existingLoops,
           },
           {

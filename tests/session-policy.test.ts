@@ -47,12 +47,13 @@ describe('session policy installer', () => {
     const content = fs.readFileSync(file, 'utf8');
     expect(content).toContain('Keep me.');
     expect(content).toContain(POLICY_BEGIN);
-    expect(content).toContain(`-File "${script}" digest --skill`);
+    expect(content).toContain(`node "${script}" digest --skill`);
   });
 
   it('keeps the digest as a prelude instead of replacing the answer', () => {
     const block = buildPolicyBlock('C:\\loops\\open-loops.ps1');
 
+    expect(block).toContain('node "C:\\loops\\open-loops.ps1" digest --skill');
     expect(block).toContain('opening prelude');
     expect(block).toContain("then answer the user's actual request");
     expect(block).toContain('not the final answer');
@@ -81,7 +82,7 @@ describe('session policy installer', () => {
     expect(results[0].action).toBe('updated');
     const content = fs.readFileSync(file, 'utf8');
     expect(content).not.toContain('C:\\old\\open-loops.ps1');
-    expect(content).toContain(`-File "${script}" digest --skill`);
+    expect(content).toContain(`node "${script}" digest --skill`);
     expect(content.startsWith('# Top\n\n')).toBe(true);
     expect(content.endsWith('# Bottom\n')).toBe(true);
   });
@@ -110,17 +111,15 @@ describe('session policy installer', () => {
     expect(fs.existsSync(file)).toBe(false);
   });
 
-  it('creates an explicitly selected agent file even when the root is absent', () => {
+  it('rejects an explicitly selected agent whose directory is absent', () => {
     const { home, script } = fixture('explicit');
 
-    const results = installSessionPolicy({
+    expect(() => installSessionPolicy({
       homeDir: home,
       scriptPath: script,
       agents: ['claude'],
-    });
-
-    expect(results[0]).toMatchObject({ agent: 'claude', action: 'installed' });
-    expect(fs.existsSync(path.join(home, '.claude', 'CLAUDE.md'))).toBe(true);
+    })).toThrow(/not found/);
+    expect(fs.existsSync(path.join(home, '.claude'))).toBe(false);
   });
 
   it('installs into ZCode and DSH global instruction files', () => {

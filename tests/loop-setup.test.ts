@@ -18,15 +18,16 @@ function tempDir(label: string): string {
   return dir;
 }
 
-function repoFixture(label: string, built = true, withHermes = true): string {
+function repoFixture(label: string, built = true, withHermes = true, withAgents = true): string {
   const root = tempDir(label);
   fs.mkdirSync(path.join(root, 'data'), { recursive: true });
   fs.mkdirSync(path.join(root, 'scripts'), { recursive: true });
   fs.writeFileSync(path.join(root, 'scripts', 'open-loops.ps1'), 'exit 0\n', 'utf8');
+  fs.writeFileSync(path.join(root, 'scripts', 'open-loops.mjs'), '// wrapper\n', 'utf8');
   fs.mkdirSync(path.join(root, 'skills', 'open-loops'), { recursive: true });
   fs.writeFileSync(
     path.join(root, 'skills', 'open-loops', 'SKILL.md'),
-    '# Test skill\n\nRun scripts\\open-loops.ps1.\n',
+    '# Test skill\n\nRun scripts/open-loops.mjs.\n',
     'utf8',
   );
   if (built) {
@@ -34,8 +35,11 @@ function repoFixture(label: string, built = true, withHermes = true): string {
     fs.writeFileSync(path.join(root, 'dist', 'src', 'loops', 'cli.js'), '// built\n', 'utf8');
   }
   const home = path.join(root, 'home');
-  fs.mkdirSync(path.join(home, '.codex'), { recursive: true });
-  fs.mkdirSync(path.join(home, '.zcode'), { recursive: true });
+  fs.mkdirSync(home, { recursive: true });
+  if (withAgents) {
+    fs.mkdirSync(path.join(home, '.codex'), { recursive: true });
+    fs.mkdirSync(path.join(home, '.zcode'), { recursive: true });
+  }
   if (withHermes) {
     fs.mkdirSync(path.join(home, 'AppData', 'Local', 'hermes'), { recursive: true });
   }
@@ -112,7 +116,7 @@ describe('loops:setup', () => {
     expect(fs.existsSync(path.join(home, '.zcode', 'AGENTS.md'))).toBe(false);
   });
 
-  it('installs only Hermes by default', async () => {
+  it('installs into every detected agent by default', async () => {
     const root = repoFixture('install-hermes');
     const home = path.join(root, 'home');
     const localAppData = path.join(home, 'AppData', 'Local');
@@ -129,20 +133,25 @@ describe('loops:setup', () => {
     expect(result.steps.find((step) => step.key === 'skill')?.status).toBe('done');
     expect(result.steps.find((step) => step.key === 'policy')?.status).toBe('done');
     expect(
+      fs.existsSync(path.join(home, '.codex', 'skills', 'open-loops', 'SKILL.md')),
+    ).toBe(true);
+    expect(fs.readFileSync(path.join(home, '.codex', 'AGENTS.md'), 'utf8'))
+      .toContain('open-loops:begin');
+    expect(fs.readFileSync(path.join(home, '.zcode', 'AGENTS.md'), 'utf8'))
+      .toContain('open-loops:begin');
+    expect(
       fs.existsSync(path.join(localAppData, 'hermes', 'skills', 'open-loops', 'SKILL.md')),
     ).toBe(true);
     expect(fs.readFileSync(path.join(localAppData, 'hermes', 'SOUL.md'), 'utf8'))
       .toContain('open-loops:begin');
     expect(result.doctor?.checks.find((check) => check.key === 'skills')?.detail)
-      .toContain('1/1');
+      .toContain('2/2');
     expect(result.doctor?.checks.find((check) => check.key === 'session-policy')?.detail)
-      .toContain('1/1');
-    expect(fs.existsSync(path.join(home, '.codex', 'skills', 'open-loops', 'SKILL.md'))).toBe(false);
-    expect(fs.existsSync(path.join(home, '.codex', 'AGENTS.md'))).toBe(false);
+      .toContain('3/3');
   });
 
-  it('fails clearly when the default Hermes entry does not exist yet', async () => {
-    const root = repoFixture('missing-hermes', true, false);
+  it('skips agent installation when no agent directory exists', async () => {
+    const root = repoFixture('missing-agents', true, false, false);
     const home = path.join(root, 'home');
     const localAppData = path.join(home, 'AppData', 'Local');
 
@@ -155,19 +164,20 @@ describe('loops:setup', () => {
       },
     });
 
-    expect(result.ok).toBe(false);
+    expect(result.ok).toBe(true);
     expect(result.steps.find((step) => step.key === 'skill')).toMatchObject({
-      status: 'failed',
+      status: 'skipped',
     });
     expect(result.steps.find((step) => step.key === 'policy')).toMatchObject({
-      status: 'failed',
+      status: 'skipped',
     });
-    expect(result.steps.find((step) => step.key === 'skill')?.detail).toContain('先启动一次');
-    expect(formatSetup(result)).toContain('有步骤失败');
+    expect(result.steps.find((step) => step.key === 'skill')?.detail)
+      .toContain('未检测到已安装的 Agent');
+    expect(formatSetup(result)).toContain('结论：初始化完成。');
   });
 
-  it('keeps dry-run honest when a selected agent is missing', async () => {
-    const root = repoFixture('missing-hermes-dry-run', true, false);
+  it('keeps an empty dry run successful without creating directories', async () => {
+    const root = repoFixture('empty-dry-run', true, false, false);
     const home = path.join(root, 'home');
 
     const result = await runSetup({
@@ -177,9 +187,10 @@ describe('loops:setup', () => {
       dryRun: true,
     });
 
-    expect(result.ok).toBe(false);
-    expect(result.steps.find((step) => step.key === 'skill')?.status).toBe('failed');
-    expect(result.steps.find((step) => step.key === 'policy')?.status).toBe('failed');
+    expect(result.ok).toBe(true);
+    expect(result.steps.find((step) => step.key === 'skill')?.status).toBe('skipped');
+    expect(result.steps.find((step) => step.key === 'policy')?.status).toBe('skipped');
+    expect(fs.existsSync(path.join(home, '.codex'))).toBe(false);
   });
 
   it('records a build failure and returns a non-zero result', async () => {

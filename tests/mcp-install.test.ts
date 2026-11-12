@@ -33,6 +33,7 @@ function install(fixture: ReturnType<typeof makeFixture>, extra: Record<string, 
     codexConfig: fixture.codexConfig,
     claudeConfig: fixture.claudeConfig,
     cursorConfig: fixture.cursorConfig,
+    clients: ['codex', 'claude', 'cursor'],
     ...extra,
   });
 }
@@ -160,6 +161,49 @@ describe('installMcpConfigs', () => {
     expect(results).toHaveLength(1);
     expect(results[0].client).toBe('claude');
     expect(fs.existsSync(f.codexConfig)).toBe(false);
+    expect(fs.existsSync(f.cursorConfig)).toBe(false);
+  });
+
+  it('only writes to detected clients when none are specified', () => {
+    const f = makeFixture('detected');
+    const home = path.join(f.dir, 'home');
+    const project = path.join(f.dir, 'project');
+    fs.mkdirSync(path.join(home, '.codex'), { recursive: true });
+    fs.mkdirSync(project, { recursive: true });
+
+    const results = installMcpConfigs({
+      serverPath: f.serverPath,
+      homeDir: home,
+      projectDir: project,
+      codexConfig: f.codexConfig,
+      claudeConfig: f.claudeConfig,
+      cursorConfig: f.cursorConfig,
+    });
+
+    expect(results.map((result) => result.client)).toEqual(['codex']);
+    expect(fs.existsSync(f.claudeConfig)).toBe(false);
+    expect(fs.existsSync(f.cursorConfig)).toBe(false);
+  });
+
+  it('writes nothing when no client is detected', () => {
+    const f = makeFixture('none-detected');
+    const home = path.join(f.dir, 'home');
+    const project = path.join(f.dir, 'empty-project');
+    fs.mkdirSync(home, { recursive: true });
+    fs.mkdirSync(project, { recursive: true });
+
+    const results = installMcpConfigs({
+      serverPath: f.serverPath,
+      homeDir: home,
+      projectDir: project,
+      codexConfig: f.codexConfig,
+      claudeConfig: f.claudeConfig,
+      cursorConfig: f.cursorConfig,
+    });
+
+    expect(results).toEqual([]);
+    expect(fs.existsSync(f.codexConfig)).toBe(false);
+    expect(fs.existsSync(f.claudeConfig)).toBe(false);
     expect(fs.existsSync(f.cursorConfig)).toBe(false);
   });
 

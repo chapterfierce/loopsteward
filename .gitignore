@@ -16,4 +16,14 @@ data/
 docs/HANDOFF.md
 docs/market-landscape-*.md
 docs/requirements-retrospective-*.md
+docs/cleanup-review-*.md
+docs/m8-design.md
+docs/phase2.5-integration-plan.md
+docs/API_REFERENCE.md
+docs/I18N_GUIDE.md
+docs/RELEASE.md
 docs/superpowers/
+
+# Internal design exploration and legacy-only assets
+assets/drafts/
+assets/concepts/

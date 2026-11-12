@@ -5,6 +5,7 @@ import type {
   SessionMessage,
 } from './types.js';
 import { downgradeWeakEvidence } from './evidence.js';
+import { resolveLlmConfig } from './llm-config.js';
 
 export interface ExtractInput {
   session: {
@@ -73,8 +74,8 @@ export class LoopExtractionError extends Error {
   }
 }
 
-export const DEFAULT_MODEL = 'marvis/deepseek-v4-1-flash-261017';
-export const DEFAULT_BASE_URL = 'http://127.0.0.1:3425/v1';
+export const DEFAULT_MODEL = '';
+export const DEFAULT_BASE_URL = '';
 const MAX_TRANSCRIPT_MESSAGES = 12;
 const MAX_MESSAGE_CHARS = 2_400;
 const MESSAGE_TAIL_CHARS = 1_200;
@@ -457,14 +458,14 @@ export function chatHeaders(apiKey: string | undefined): Record<string, string> 
   return headers;
 }
 
-function createDefaultChat(baseUrl: string, timeoutMs: number): ChatFn {
+function createDefaultChat(baseUrl: string, timeoutMs: number, apiKey?: string): ChatFn {
   return async (messages, options) => {
     const endpoint = `${baseUrl.replace(/\/$/, '')}/chat/completions`;
     let response: Response;
     try {
       response = await fetch(endpoint, {
         method: 'POST',
-        headers: chatHeaders(process.env.MAGPIE_API_KEY),
+        headers: chatHeaders(apiKey),
         body: JSON.stringify({
           model: options.model,
           messages,
@@ -475,14 +476,14 @@ function createDefaultChat(baseUrl: string, timeoutMs: number): ChatFn {
         signal: AbortSignal.timeout(timeoutMs),
       });
     } catch (error) {
-      throw new LoopExtractionError('transport', `调用 Magpie 失败: ${(error as Error).message}`);
+      throw new LoopExtractionError('transport', `调用 LLM 失败: ${(error as Error).message}`);
     }
 
     const bodyText = await response.text();
     if (!response.ok) {
       throw new LoopExtractionError(
         'transport',
-        `Magpie 返回 HTTP ${response.status}: ${bodyText.slice(0, 300)}`,
+        `LLM 返回 HTTP ${response.status}: ${bodyText.slice(0, 300)}`,
       );
     }
 
@@ -490,7 +491,7 @@ function createDefaultChat(baseUrl: string, timeoutMs: number): ChatFn {
     try {
       body = JSON.parse(bodyText);
     } catch {
-      throw new LoopExtractionError('transport', 'Magpie 返回的不是 JSON');
+      throw new LoopExtractionError('transport', 'LLM 返回的不是 JSON');
     }
     const content = body?.choices?.[0]?.message?.content;
     if (typeof content === 'string' && content.trim()) return content;
@@ -500,7 +501,30 @@ function createDefaultChat(baseUrl: string, timeoutMs: number): ChatFn {
         .join('');
       if (text.trim()) return text;
     }
-    throw new LoopExtractionError('transport', 'Magpie 返回里没有 choices[0].message.content');
+    throw new LoopExtractionError('transport', 'LLM 返回里没有 choices[0].message.content');
+  };
+}
+
+function resolveChatOptions(options: ExtractOptions): { chat: ChatFn; model: string } {
+  const config = resolveLlmConfig({ baseUrl: options.baseUrl, model: options.model });
+  const model = config.model || DEFAULT_MODEL;
+  if (options.chat) return { chat: options.chat, model };
+  const baseUrl = config.baseUrl || DEFAULT_BASE_URL;
+  if (!baseUrl) {
+    throw new LoopExtractionError(
+      'validation',
+      '缺少 LLM 地址：请设置 LOOPSTEWARD_BASE_URL（兼容 MAGPIE_BASE_URL），或传入 baseUrl',
+    );
+  }
+  if (!model) {
+    throw new LoopExtractionError(
+      'validation',
+      '缺少模型名：请设置 LOOPSTEWARD_MODEL（兼容 MAGPIE_MODEL），或传入 model',
+    );
+  }
+  return {
+    chat: createDefaultChat(baseUrl, options.timeoutMs ?? 120_000, config.apiKey),
+    model,
   };
 }
 
@@ -508,9 +532,7 @@ export async function extractLoops(
   input: ExtractInput,
   options: ExtractOptions = {},
 ): Promise<ExtractedLoop[]> {
-  const model = options.model ?? process.env.MAGPIE_MODEL ?? DEFAULT_MODEL;
-  const baseUrl = options.baseUrl ?? process.env.MAGPIE_BASE_URL ?? DEFAULT_BASE_URL;
-  const chat = options.chat ?? createDefaultChat(baseUrl, options.timeoutMs ?? 120_000);
+  const { chat, model } = resolveChatOptions(options);
   const maxLoops = options.maxLoops ?? 3;
   const maxTokens = options.maxTokens ?? 2_400;
   const retries = options.retries ?? 1;
@@ -554,9 +576,7 @@ export async function extractResolutions(
   input: ResolveInput,
   options: ExtractOptions = {},
 ): Promise<ResolvedLoop[]> {
-  const model = options.model ?? process.env.MAGPIE_MODEL ?? DEFAULT_MODEL;
-  const baseUrl = options.baseUrl ?? process.env.MAGPIE_BASE_URL ?? DEFAULT_BASE_URL;
-  const chat = options.chat ?? createDefaultChat(baseUrl, options.timeoutMs ?? 120_000);
+  const { chat, model } = resolveChatOptions(options);
   const minConfidence = options.minConfidence ?? 0.85;
   const maxTokens = options.maxTokens ?? RESOLUTION_MAX_TOKENS;
   const retries = options.retries ?? 1;

@@ -5,8 +5,7 @@ MCP phase 1：只读接入。服务通过 stdio 暴露四个工具，复用现�
 ## 启动
 
 ```bash
-npm run build
-node dist/src/mcp/server.js --db data/loops.db
+loopsteward-mcp --db data/loops.db
 ```
 
 不传 `--db` 时使用 `resolveDefaultDbPath()`：仓库检出使用 `data/loops.db`，全局安装使用用户数据目录。
@@ -92,10 +91,12 @@ node dist/src/mcp/server.js --db data/loops.db
 ## 安装到客户端
 
 ```bash
-npm run loops:install-mcp -- --json
+loopsteward install-mcp --json
 ```
 
-默认写入：
+默认只写入已检测到的客户端配置；一个都没有时不会创建空配置。显式指定时可用 `--agents codex,claude,cursor` 写入对应客户端。
+
+默认目标：
 
 | 客户端 | 文件 |
 |--------|------|
@@ -142,4 +143,4 @@ args = ["C:\\path\\to\\dist\\src\\mcp\\server.js"]
 
 - M2 的类型化 ledger 不在本阶段。
 - M3 的 closing ceremony 写操作不在本阶段；`loops_closing` 只提供只读清单，关闭仍需用户确认。
-- 本阶段不写回 Magpie，不修改 loop 状态，不生成反馈。
+- 本阶段不写回索引，不修改 loop 状态，不生成反馈。

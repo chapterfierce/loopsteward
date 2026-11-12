@@ -38,6 +38,7 @@ import {
   type PolicyAgent,
 } from './session-policy.js';
 import { installMcpConfigs, type McpClient } from './mcp-install.js';
+import { detectPolicyAgents, detectSkillAgents } from './agent-detect.js';
 import { runRedact } from './redact-cli.js';
 import { formatSetup, runSetup } from './setup.js';
 import { buildCalibration, formatCalibration } from './calibrate.js';
@@ -80,10 +81,10 @@ function usage(): string {
     '  loopsteward backup [--db <path>] [--out <path>] [--keep 30] [--json]',
     '  loopsteward redact [--db <path>] [--apply] [--keep <n>] [--json]',
     '  loopsteward restore --backup <path> [--db <path>] [--dry-run] [--json]',
-    '  loopsteward install-skill [--source <path>] [--target <path> | --agents codex,claude,qoder,workbuddy,hermes,antigravity | --all] [--json]',
-    '  loopsteward install-policy [--agents codex,claude,zcode,dsh,antigravity,hermes] [--dry-run] [--uninstall] [--json]',
-    '  loopsteward install-mcp [--agents codex,claude,cursor] [--project-dir <dir>] [--dry-run] [--uninstall] [--json]',
-    '  loopsteward setup [--agents codex,claude,qoder,workbuddy,hermes,antigravity] [--schedule] [--ingest] [--import-db <path>] [--dry-run] [--json]',
+    '  loopsteward install-skill [--source <path>] [--target <path> | --agents <list>] [--json]   (default: detected agents)',
+    '  loopsteward install-policy [--agents <list>] [--dry-run] [--uninstall] [--json]   (default: detected agents)',
+    '  loopsteward install-mcp [--agents codex,claude,cursor] [--project-dir <dir>] [--dry-run] [--uninstall] [--json]   (default: detected clients)',
+    '  loopsteward setup [--agents <list>] [--schedule] [--ingest] [--import-db <path>] [--dry-run] [--json]   (default: detected agents)',
     '  loopsteward calibrate [--limit 5] [--db <path>] [--json]',
     '  loopsteward closing [--limit 10] [--origin user|assistant|mixed] [--completion] [--project <dir>] [--db <path>] [--json]',
     '  loopsteward archive-sessions [--days 7] [--limit 20] [--apply] [--db <path>] [--json]',
@@ -107,6 +108,7 @@ function parseArgs(argv: string[]): ParsedArgs {
     '--agents',
     '--project-dir', '--codex-config', '--claude-config', '--cursor-config',
     '--server-path', '--node-command',
+    '--local-appdata',
   ]);
 
   for (let index = 0; index < rest.length; index += 1) {
@@ -391,11 +393,14 @@ function runStats(flags: Map<string, string | true>): number {
 
 function runDoctor(flags: Map<string, string | true>): number {
   const all = flags.has('--all');
+  const home = flagString(flags, '--home');
+  const localAppData = flagString(flags, '--local-appdata');
   const report = buildLoopDoctor({
     dbPath: flagString(flags, '--db'),
-    home: flagString(flags, '--home'),
-    skillAgents: all ? undefined : ['hermes'],
-    policyAgents: all ? undefined : ['hermes'],
+    home,
+    localAppData,
+    skillAgents: all ? undefined : detectSkillAgents({ homeDir: home, localAppData }),
+    policyAgents: all ? undefined : detectPolicyAgents({ homeDir: home, localAppData }),
   });
   if (flags.has('--json')) console.log(JSON.stringify(report, null, 2));
   else console.log(formatLoopDoctor(report));
@@ -1029,16 +1034,19 @@ function runInstallSkill(flags: Map<string, string | true>): number {
     }
     const agents = agentsFlag
       ? agentsFlag.split(',').map((value) => value.trim()).filter(Boolean)
-      : flags.has('--all')
-        ? undefined
-        : ['hermes'] as SkillAgent[];
+      : undefined;
     const results = installOpenLoopsSkillForAgents({
       sourcePath: flagString(flags, '--source'),
       agents: agents as SkillAgent[] | undefined,
+      homeDir: flagString(flags, '--home'),
+      localAppData: flagString(flags, '--local-appdata'),
     });
     if (flags.has('--json')) {
       console.log(JSON.stringify({ results }, null, 2));
     } else {
+      if (results.length === 0) {
+        console.log('No installed agent directory found; pass --agents codex,claude,... to choose explicitly.');
+      }
       for (const result of results) {
         console.log(`Skill[${result.agent}]: ${result.action} · ${result.target}`);
         console.log(`SHA256: ${result.sha256}`);
@@ -1067,15 +1075,20 @@ function runInstallPolicy(flags: Map<string, string | true>): number {
   const agentsFlag = flagString(flags, '--agents');
   const agents = agentsFlag
     ? agentsFlag.split(',').map((value) => value.trim()).filter(Boolean) as PolicyAgent[]
-    : ['hermes'] as PolicyAgent[];
+    : undefined;
   const results = installSessionPolicy({
     agents,
+    homeDir: flagString(flags, '--home'),
+    localAppData: flagString(flags, '--local-appdata'),
     dryRun: flags.has('--dry-run'),
     uninstall: flags.has('--uninstall'),
   });
   if (flags.has('--json')) {
     console.log(JSON.stringify({ results }, null, 2));
     return 0;
+  }
+  if (results.length === 0) {
+    console.log('No installed agent instruction file found; pass --agents codex,claude,... to choose explicitly.');
   }
   for (const result of results) {
     console.log(`Policy[${result.agent}]: ${result.action} · ${result.file}`);
@@ -1086,11 +1099,14 @@ function runInstallPolicy(flags: Map<string, string | true>): number {
 
 function runInstallMcp(flags: Map<string, string | true>): number {
   const agentsFlag = flagString(flags, '--agents');
-  const clients = agentsFlag
-    ? agentsFlag.split(',').map((value) => value.trim()).filter(Boolean) as McpClient[]
-    : undefined;
+  const clients = flags.has('--all')
+    ? ['codex', 'claude', 'cursor'] as McpClient[]
+    : agentsFlag
+      ? agentsFlag.split(',').map((value) => value.trim()).filter(Boolean) as McpClient[]
+      : undefined;
   const results = installMcpConfigs({
     clients,
+    homeDir: flagString(flags, '--home'),
     projectDir: flagString(flags, '--project-dir'),
     codexConfig: flagString(flags, '--codex-config'),
     claudeConfig: flagString(flags, '--claude-config'),
@@ -1104,6 +1120,9 @@ function runInstallMcp(flags: Map<string, string | true>): number {
   if (flags.has('--json')) {
     console.log(JSON.stringify({ results }, null, 2));
   } else {
+    if (results.length === 0) {
+      console.log('No installed MCP client found; pass --agents codex,claude,cursor or --all to choose explicitly.');
+    }
     for (const result of results) {
       console.log(`MCP[${result.client}]: ${result.action} · ${result.file}`);
       if (result.backup) console.log(`Backup: ${result.backup}`);
@@ -1121,6 +1140,8 @@ async function runSetupCommand(flags: Map<string, string | true>): Promise<numbe
     : undefined;
   const result = await runSetup({
     agents,
+    homeDir: flagString(flags, '--home'),
+    localAppData: flagString(flags, '--local-appdata'),
     dryRun: flags.has('--dry-run'),
     schedule: flags.has('--schedule'),
     ingest: flags.has('--ingest'),

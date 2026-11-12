@@ -5,8 +5,8 @@ function usage(): string {
   return [
     'Usage: npm run magpie:scan -- [--home <path>] [--json]',
     '',
-    'Reads memory.json and distill.json from the Magpie home.',
-    'Read-only: never writes to Magpie.',
+    'Reads memory.json and distill.json from the session index home.',
+    'Read-only: never writes to the index.',
   ].join('\n');
 }
 

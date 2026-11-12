@@ -80,13 +80,13 @@ function normalizeSource(value: unknown): MagpieSourceRef | null {
 export function readMagpieMemory(filePath: string): MagpieMemoryFile {
   const data = asRecord(readJson(filePath));
   if (!data) {
-    throw new MagpieSourceError(`Invalid Magpie memory file ${filePath}: expected an object`);
+    throw new MagpieSourceError(`Invalid memory file ${filePath}: expected an object`);
   }
   if (typeof data['version'] !== 'number') {
-    throw new MagpieSourceError(`Invalid Magpie memory file ${filePath}: version must be a number`);
+    throw new MagpieSourceError(`Invalid memory file ${filePath}: version must be a number`);
   }
   if (!Array.isArray(data['memories'])) {
-    throw new MagpieSourceError(`Invalid Magpie memory file ${filePath}: memories must be an array`);
+    throw new MagpieSourceError(`Invalid memory file ${filePath}: memories must be an array`);
   }
   const projects = (asRecord(data['projects']) ?? {}) as Record<string, MagpieProject>;
   const memories = data['memories'].map((entry, index): MagpieMemoryRecord => {
@@ -126,11 +126,11 @@ export function readMagpieMemory(filePath: string): MagpieMemoryFile {
 export function readMagpieDistill(filePath: string): MagpieDistillFile {
   const data = asRecord(readJson(filePath));
   if (!data) {
-    throw new MagpieSourceError(`Invalid Magpie distill file ${filePath}: expected an object`);
+    throw new MagpieSourceError(`Invalid distill file ${filePath}: expected an object`);
   }
   const doneRaw = asRecord(data['done']);
   if (!doneRaw) {
-    throw new MagpieSourceError(`Invalid Magpie distill file ${filePath}: done must be an object`);
+    throw new MagpieSourceError(`Invalid distill file ${filePath}: done must be an object`);
   }
   const done: Record<string, string> = {};
   for (const [key, value] of Object.entries(doneRaw)) {

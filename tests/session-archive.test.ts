@@ -50,7 +50,7 @@ describe('session archive', () => {
       '2026-10-20T00:00:00.000Z',
     );
     seed(store, 'Fresh session', 'Hermes · 新问题', 'C:/hermes/b', '2026-11-10T00:00:00.000Z');
-    seed(store, 'Real project', 'focusflow', 'C:/work/focusflow', '2026-10-20T00:00:00.000Z');
+    seed(store, 'Real project', 'sample-app', 'C:/work/sample-app', '2026-10-20T00:00:00.000Z');
 
     const plan = buildSessionArchivePlan({ store, now, days: 14 });
 

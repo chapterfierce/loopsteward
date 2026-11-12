@@ -3,7 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { findPackageRoot } from './package-root.js';
 
-export const POLICY_BEGIN = '<!-- open-loops:begin · managed by claw-task-service -->';
+export const POLICY_BEGIN = '<!-- open-loops:begin · managed by loopsteward -->';
 export const POLICY_END = '<!-- open-loops:end -->';
 export const POLICY_VERSION = 'v2';
 
@@ -117,7 +117,7 @@ export function buildPolicyBlock(scriptPath: string, eol = '\n'): string {
     '',
     'At the start of a work session, before the first substantive reply, run this once:',
     '',
-    `powershell -NoProfile -ExecutionPolicy Bypass -File "${commandPath}" digest --skill`,
+    `node "${commandPath}" digest --skill`,
     '',
     'Print the command output verbatim as an opening prelude, then answer the user\'s actual request in the same turn.',
     'The digest is a reminder, not the final answer: never stop after printing it, and never replace the requested work with the digest.',
@@ -169,7 +169,7 @@ export function installSessionPolicy(
   options: SessionPolicyInstallOptions = {},
 ): SessionPolicyResult[] {
   const scriptPath = path.resolve(
-    options.scriptPath ?? path.join(findPackageRoot(), 'scripts', 'open-loops.ps1'),
+    options.scriptPath ?? path.join(findPackageRoot(), 'scripts', 'open-loops.mjs'),
   );
   if (!options.uninstall && !fs.existsSync(scriptPath)) {
     throw new Error(`open-loops script not found: ${scriptPath}`);
@@ -183,6 +183,16 @@ export function installSessionPolicy(
   const selected = requested
     ? targets.filter((item) => requested.includes(item.agent))
     : targets.filter((item) => fs.existsSync(item.root) || fs.existsSync(item.file));
+  if (requested) {
+    const unavailable = selected.filter(
+      (item) => !fs.existsSync(item.root) && !fs.existsSync(item.file),
+    );
+    if (unavailable.length > 0) {
+      throw new Error(
+        `agent instruction directory not found: ${unavailable.map((item) => `${item.agent} (${item.root})`).join(', ')}; start the agent once, then retry`,
+      );
+    }
+  }
   if (selected.length === 0) {
     throw new Error(`no supported agent instruction file found under ${options.homeDir ?? os.homedir()}`);
   }
@@ -225,7 +235,7 @@ export function inspectSessionPolicy(
   options: PolicyTargetOptions & { scriptPath?: string; agents?: PolicyAgent[] } = {},
 ): SessionPolicyInspection[] {
   const scriptPath = path.resolve(
-    options.scriptPath ?? path.join(findPackageRoot(), 'scripts', 'open-loops.ps1'),
+    options.scriptPath ?? path.join(findPackageRoot(), 'scripts', 'open-loops.mjs'),
   );
   const targets = policyTargets(options).filter(
     (target) =>

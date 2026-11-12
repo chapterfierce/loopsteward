@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import {
   installOpenLoopsSkill,
   installOpenLoopsSkillForAgents,
+  renderOpenLoopsSkill,
   skillAgentTargets,
 } from '../src/loops/skill-install.js';
 
@@ -103,7 +104,8 @@ describe('installOpenLoopsSkill', () => {
     const { source, dir } = fixture();
     const home = path.join(dir, 'home');
     const localAppData = path.join(dir, 'local');
-    fs.mkdirSync(home, { recursive: true });
+    fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
+    fs.mkdirSync(path.join(localAppData, 'hermes'), { recursive: true });
 
     const results = installOpenLoopsSkillForAgents({
       sourcePath: source,
@@ -128,16 +130,14 @@ describe('installOpenLoopsSkill', () => {
     expect(fs.readFileSync(target, 'utf8')).toBe('# Open Loops\n');
   });
 
-  it.skipIf(process.platform !== 'win32')(
-    'renders the installed package root into the skill body',
-    () => {
+  it('renders the installed package root into the skill body on every platform', () => {
       const { source, target, dir } = fixture();
       fs.writeFileSync(
         source,
         [
           '# Open Loops',
-          'powershell -File "C:\\old\\repo\\scripts\\open-loops.ps1" digest --skill',
-          'powershell -File "C:\\old\\repo\\scripts\\refresh-open-loops.ps1"',
+          'node "__LOOPSTEWARD_OPEN_LOOPS_SCRIPT__" digest --skill',
+          'powershell -File "__LOOPSTEWARD_REFRESH_SCRIPT__"',
           '',
         ].join('\n'),
         'utf8',
@@ -152,11 +152,11 @@ describe('installOpenLoopsSkill', () => {
 
       const content = fs.readFileSync(target, 'utf8');
       expect(result.action).toBe('installed');
-      expect(content).toContain(path.join(packageRoot, 'scripts', 'open-loops.ps1'));
+      expect(content).toContain(path.join(packageRoot, 'scripts', 'open-loops.mjs'));
       expect(content).toContain(path.join(packageRoot, 'scripts', 'refresh-open-loops.ps1'));
       expect(content).not.toContain('C:\\old\\repo');
-    },
-  );
+      expect(content).not.toContain('C:\\loopsteward');
+  });
 
   it('backs up a previous skill before replacing it', () => {
     const { source, target } = fixture();
@@ -174,6 +174,16 @@ describe('installOpenLoopsSkill', () => {
     expect(result.backup).toBeTruthy();
     expect(fs.readFileSync(result.backup!, 'utf8')).toBe('# Old\n');
     expect(fs.readFileSync(target, 'utf8')).toBe('# New\n');
+  });
+
+  it('backfills a legacy POSIX wrapper path', () => {
+    const rendered = renderOpenLoopsSkill(
+      '# Open Loops\nnode "/opt/loopsteward/scripts/open-loops.ps1" digest --skill\n',
+      '/opt/installed',
+    );
+
+    expect(rendered).toContain(path.join('/opt/installed', 'scripts', 'open-loops.mjs'));
+    expect(rendered).not.toContain('/opt/loopsteward');
   });
 
   it('moves a nested duplicate out of the skill scan path', () => {
@@ -201,8 +211,9 @@ describe('installOpenLoopsSkill', () => {
     expect(skill).toContain('Do not add, remove, reorder, rewrite, or recompute');
     expect(skill).not.toContain('K 取 `activeTotal`');
     expect(skill).not.toContain('最近活跃：A（N 个会话）');
-    expect(skill).toContain('scripts\\open-loops.ps1');
-    expect(skill).toContain('powershell -NoProfile -ExecutionPolicy Bypass -File');
+    expect(skill).toContain('scripts/open-loops.mjs');
+    expect(skill).toContain('node "__LOOPSTEWARD_OPEN_LOOPS_SCRIPT__"');
+    expect(skill).not.toContain('powershell -NoProfile -ExecutionPolicy Bypass -File "__LOOPSTEWARD_OPEN_LOOPS_SCRIPT__"');
     expect(skill).not.toContain('& "C:');
     expect(skill).not.toContain('npm --prefix');
   });
