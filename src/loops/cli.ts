@@ -80,7 +80,7 @@ function usage(): string {
     '  loopsteward install-mcp [--agents codex,claude,cursor] [--project-dir <dir>] [--dry-run] [--uninstall] [--json]',
     '  loopsteward setup [--agents codex,claude,qoder,workbuddy,hermes,antigravity] [--schedule] [--ingest] [--import-db <path>] [--dry-run] [--json]',
     '  loopsteward calibrate [--limit 5] [--db <path>] [--json]',
-    '  loopsteward closing [--limit 10] [--db <path>] [--json]',
+    '  loopsteward closing [--limit 10] [--project <dir>] [--db <path>] [--json]',
   ].join('\n');
 }
 
@@ -287,6 +287,7 @@ function runClosing(flags: Map<string, string | true>): number {
     const review = buildClosingReview({
       store,
       limit: flagNumber(flags, '--limit'),
+      projectDir: flagString(flags, '--project'),
     });
     if (flags.has('--json')) {
       console.log(JSON.stringify(review, null, 2));

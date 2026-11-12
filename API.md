@@ -26,6 +26,7 @@ Open Loops phase 1 adds a stdio MCP server. It is separate from the legacy HTTP 
 | `loops_context` | Return up to 3 unfinished loops for one project directory |
 | `loops_search` | Search loops by text, status, project, and limit |
 | `loops_get` | Return one loop and its source message excerpts by stable ref |
+| `loops_closing` | List shown-but-unclosed loops, optionally filtered by project directory |
 
 Start it with `npm run build && node dist/src/mcp/server.js --db data/loops.db`. Install client configuration with `npm run loops:install-mcp -- --json`. Full protocol and configuration details are in [`docs/MCP.md`](docs/MCP.md).
 

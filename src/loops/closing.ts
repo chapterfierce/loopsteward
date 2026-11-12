@@ -31,6 +31,7 @@ export interface ClosingOptions {
   store: LoopStore;
   now?: Date;
   limit?: number;
+  projectDir?: string;
 }
 
 function clampLimit(value: number | undefined): number {
@@ -38,13 +39,19 @@ function clampLimit(value: number | undefined): number {
   return Math.max(1, Math.min(MAX_LIMIT, Math.floor(value as number)));
 }
 
+function projectKey(value: string): string {
+  return value.trim().replace(/[\\/]+$/, '').replace(/\\/g, '/').toLowerCase();
+}
+
 export function buildClosingReview(options: ClosingOptions): ClosingReview {
   const now = options.now ?? new Date();
   const stats = options.store.getPresentationStats(now.toISOString());
+  const project = options.projectDir ? projectKey(options.projectDir) : undefined;
   const items: ClosingItem[] = [];
 
   for (const loop of options.store.listActiveLoops()) {
     if (loop.status !== 'open' && loop.status !== 'pending') continue;
+    if (project && projectKey(loop.projectDir) !== project) continue;
     const presentation = stats.get(loop.id);
     if (!presentation) continue;
     items.push({

@@ -11,6 +11,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { buildDigest } from '../loops/digest.js';
 import { buildLoopDetail } from '../loops/detail.js';
+import { buildClosingReview } from '../loops/closing.js';
 import { loopRef } from '../loops/loop-ref.js';
 import { LoopStore } from '../loops/loop-store.js';
 import { resolveDefaultDbPath } from '../loops/data-path.js';
@@ -99,6 +100,28 @@ const TOOLS: Tool[] = [
         },
       },
       required: ['ref'],
+      additionalProperties: false,
+    },
+    annotations: READ_ONLY_ANNOTATIONS,
+  },
+  {
+    name: 'loops_closing',
+    description:
+      'List loops that were already shown but never closed, ordered by presentation count. Read-only; never changes loop state.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectDir: {
+          type: 'string',
+          description: 'Absolute project directory filter. Omit to include all projects.',
+        },
+        limit: {
+          type: 'number',
+          minimum: 1,
+          maximum: 20,
+          description: 'Maximum number of loops to return. Defaults to 10.',
+        },
+      },
       additionalProperties: false,
     },
     annotations: READ_ONLY_ANNOTATIONS,
@@ -280,12 +303,27 @@ function getTool(store: LoopStore, args: Record<string, unknown>): CallToolResul
   });
 }
 
+function closingTool(store: LoopStore, args: Record<string, unknown>): CallToolResult {
+  const projectDir = readString(args, 'projectDir');
+  const limit = clamp(Math.floor(readNumber(args, 'limit') ?? 10), 1, 20);
+  const review = buildClosingReview({ store, projectDir, limit });
+  return textResult({
+    projectDir: projectDir ? path.resolve(projectDir) : null,
+    total: review.total,
+    shown: review.shown,
+    items: review.items.map((item) => ({
+      ...item,
+      ref: loopRef(item.id),
+    })),
+  });
+}
+
 async function main(): Promise<void> {
   const parsed = parseServerArgs(process.argv.slice(2));
   if (parsed.help) {
     process.stderr.write(
       'Usage: node dist/src/mcp/server.js [--db <path>]\n'
-      + 'Read-only MCP server for LoopSteward. Exposes loops_context, loops_search, loops_get.\n',
+      + 'Read-only MCP server for LoopSteward. Exposes loops_context, loops_search, loops_get, loops_closing.\n',
     );
     return;
   }
@@ -297,7 +335,8 @@ async function main(): Promise<void> {
       capabilities: { tools: {} },
       instructions:
         'Read-only access to LoopSteward open loops. Use loops_context for the current project, '
-        + 'loops_search to find loops, and loops_get for details and source excerpts.',
+        + 'loops_search to find loops, loops_get for details and source excerpts, and '
+        + 'loops_closing for items already shown but never closed.',
     },
   );
 
@@ -308,6 +347,7 @@ async function main(): Promise<void> {
       if (request.params.name === 'loops_context') return contextTool(store, args);
       if (request.params.name === 'loops_search') return searchTool(store, args);
       if (request.params.name === 'loops_get') return getTool(store, args);
+      if (request.params.name === 'loops_closing') return closingTool(store, args);
       return errorResult(`unknown tool: ${request.params.name}`);
     } catch (error) {
       return errorResult((error as Error).message);

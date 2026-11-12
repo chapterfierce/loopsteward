@@ -226,6 +226,7 @@ describe('LoopSteward MCP server', () => {
     const client = await connect(dbPath);
     const result = await client.request('tools/list');
     expect(result.tools.map((tool: any) => tool.name).sort()).toEqual([
+      'loops_closing',
       'loops_context',
       'loops_get',
       'loops_search',
@@ -278,6 +279,28 @@ describe('LoopSteward MCP server', () => {
     expect(data.signals[0].excerpt).toContain('错误提示');
   });
 
+  it('lists shown-but-open loops for a closing review', async () => {
+    const { dbPath, alpha, loopIds } = fixture('closing');
+    const store = new LoopStore(dbPath);
+    try {
+      store.recordPresentation([loopIds[0]], '2026-11-10T11:00:00.000Z', 'hot', 'hot');
+      store.recordPresentation([loopIds[0]], '2026-11-10T12:00:00.000Z', 'hot', 'recap');
+      store.recordPresentation([loopIds[4]], '2026-11-10T13:00:00.000Z', 'hot', 'hot');
+    } finally {
+      store.close();
+    }
+
+    const client = await connect(dbPath);
+    const all = payload(await callTool(client, 'loops_closing', { limit: 10 }));
+    expect(all.total).toBe(2);
+    expect(all.items[0].ref).toBe(loopRef(loopIds[0]));
+    expect(all.items[0].presentationCount).toBe(2);
+
+    const alphaOnly = payload(await callTool(client, 'loops_closing', { projectDir: alpha }));
+    expect(alphaOnly.total).toBe(1);
+    expect(alphaOnly.items[0].title).toBe('Alpha login');
+  });
+
   it('reports an ambiguous ref instead of picking one loop', async () => {
     const { dbPath, loopIds } = fixture('ambiguous');
     const store = new LoopStore(dbPath);
@@ -323,6 +346,7 @@ describe('LoopSteward MCP server', () => {
     await callTool(client, 'loops_context', { projectDir: alpha });
     await callTool(client, 'loops_search', { query: 'alpha' });
     await callTool(client, 'loops_get', { ref: loopRef(loopIds[0]) });
+    await callTool(client, 'loops_closing', { projectDir: alpha });
     await client.close();
 
     const after = new LoopStore(dbPath);
