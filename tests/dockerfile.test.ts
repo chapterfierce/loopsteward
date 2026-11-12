@@ -17,7 +17,17 @@ describe('Dockerfile', () => {
     expect(dockerfile).not.toContain('http://localhost:3000/health');
   });
 
-  it('keeps the legacy HTTP service out of the production dependency set', () => {
+  it('installs production dependencies with the supported omit flag', () => {
+    const dockerfile = fs.readFileSync(
+      path.join(process.cwd(), 'Dockerfile'),
+      'utf8',
+    );
+
+    expect(dockerfile).toContain('RUN npm ci --omit=dev');
+    expect(dockerfile).not.toContain('--only=production');
+  });
+
+  it('keeps express out of top-level production dependencies and the MCP SDK in them', () => {
     const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8')) as {
       dependencies?: Record<string, string>;
       devDependencies: Record<string, string>;
@@ -26,6 +36,7 @@ describe('Dockerfile', () => {
 
     expect(pkg.scripts['build:open-loops']).toBe('tsc -p tsconfig.open-loops.json');
     expect(pkg.dependencies?.express).toBeUndefined();
+    expect(pkg.dependencies?.['@modelcontextprotocol/sdk']).toBe('^1.32.2');
     expect(pkg.devDependencies.express).toBe('^4.22.3');
   });
 });

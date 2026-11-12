@@ -247,7 +247,7 @@ export function formatLoopStats(stats: LoopStats): string {
   const lines = [
     '# 开放循环统计',
     '',
-    `- 全部 ${stats.totals.all} 条：open ${stats.totals.open} / pending ${stats.totals.pending} / snoozed ${stats.totals.snoozed} / resolved ${stats.totals.resolved} / dropped ${stats.totals.dropped}`,
+    `- 全部 ${stats.totals.all} 条：open ${stats.totals.open}（真实 ${stats.totals.open - stats.projectSummary.sessionOnlyOpen} / 临时 ${stats.projectSummary.sessionOnlyOpen}）/ pending ${stats.totals.pending}（真实 ${stats.totals.pending - stats.projectSummary.sessionOnlyPending} / 临时 ${stats.projectSummary.sessionOnlyPending}）/ snoozed ${stats.totals.snoozed} / resolved ${stats.totals.resolved} / dropped ${stats.totals.dropped}`,
     `- 来源：用户 ${stats.totals.origins.user} / 助手 ${stats.totals.origins.assistant} / 混合 ${stats.totals.origins.mixed}`,
     `- 已关闭 ${closed} / ${stats.totals.all}（${closurePercent}）；其中完成 ${stats.totals.resolved}、放弃 ${droppedByUser}；自摄入清理 ${stats.resolution.selfGeneratedDropped} 条不计入`,
     `- 中位关闭耗时 ${median}`,

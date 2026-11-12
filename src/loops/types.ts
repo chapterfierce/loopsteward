@@ -290,6 +290,8 @@ export interface DigestFocusProject {
   matched: boolean;
   shown: number;
   backlog: number;
+  userBacklog?: number;
+  assistantBacklog?: number;
 }
 
 export interface DigestResult {
@@ -298,8 +300,11 @@ export interface DigestResult {
   groups: DigestGroup[];
   reviewPick?: LoopRecord;
   focusProject?: DigestFocusProject;
+  focusNextLoop?: LoopRecord;
+  focusCompletionCandidate?: ReconcileCacheCandidate;
   reviewDue?: boolean;
   reviewRemaining?: number;
+  reviewRemainingSessionOnly?: number;
   pendingTotal?: number;
   closeCandidates?: ReconcileCacheCandidate[];
   recap: LoopRecord[];
@@ -309,9 +314,34 @@ export interface DigestResult {
   recapFocusEmpty?: boolean;
   closingTotal?: number;
   focusClosingTotal?: number;
+  closingCompletionTotal?: number;
+  focusClosingCompletionTotal?: number;
+  closingCompletionOrigins?: {
+    user: number;
+    assistant: number;
+    mixed: number;
+  };
+  focusClosingCompletionOrigins?: {
+    user: number;
+    assistant: number;
+    mixed: number;
+  };
+  closingOrigins: {
+    user: number;
+    assistant: number;
+    mixed: number;
+  };
+  focusClosingOrigins?: {
+    user: number;
+    assistant: number;
+    mixed: number;
+  };
   recapCooldownMinutes: number;
   total: number;
   activeTotal: number;
+  userActiveTotal: number;
+  userActiveSessionOnly?: number;
+  assistantBacklog: number;
   eligibleTotal: number;
   coolingDown: number;
   dailySurfaced: number;

@@ -6,8 +6,8 @@
 
 LoopSteward（守环）是并行 AI 会话的开放循环追踪器。它从 Codex、Claude Code、Claude Desktop（Code/Cowork）、Qoder、ZCode、WorkBuddy、Hermes、DeepSeek Harness（DSH）、Antigravity（CLI）的最近会话尾部提取未闭环事项，落到本机 SQLite，通过 skill 在之后的工作会话里回访，并用独立核对命令关闭已经完成的事项。
 
-**Version:** 2.9.0
-**Status:** Open Loops M1–M153 + MCP phase 1 (read-only) complete; package and global-install path verified; legacy HTTP task service deprecated
+**Version:** 2.9.1
+**Status:** Open Loops M1–M187 + MCP phase 1 (read-only) complete; package and global-install path verified; legacy HTTP task service deprecated
 
 ---
 
@@ -30,7 +30,7 @@ LoopSteward（守环）是并行 AI 会话的开放循环追踪器。它从 Code
 
 当前主线是 Open Loops，解决“并行开很多 AI 会话，有价值但未闭环的事被遗忘”的问题：
 
-1. **采集** — 只读各 Agent 的本地会话库/JSONL，默认取最近 7 天、已静置 30 分钟的会话尾部。
+1. **采集** — 只读各 Agent 的本地会话库/JSONL，默认取最近 7 天、已静置 30 分钟的会话尾部。即使显式用 `--settle-minutes 0`，最后一条是 5 分钟内的用户问句时也会先压住，等助手回答落盘或超时后再提取，避免把刚问、随即被回答的问题记成未闭环。
 2. **提取** — 调用本机 Magpie 模型，只提取未完成任务、未解决 bug、承诺的下一步和待拍板决定；来源消息必须过白名单。
 3. **回访** — `skills/open-loops` 在会话开始展示最多 3 条；7 天没做完整周回顾时，首批额外带 1 条活动窗口外的旧库存预览，不占这 3 条预算；每日 3 条用完后，“今天提过”摘要仍会带最多 1 条近期核对出的“可能已完成”，不占预算，同一候选 24 小时内不重复；用户明确回答“确实忘了”的条目还会跨项目补 1 条，不占预算，同一条 24 小时内不重复；周回顾展示 10–20 条，真实项目优先、临时会话最多 5 条，页脚把临时工作区收成一行，每条只给标题、置信度、挂起天数和 ref，要细节再按 ref 查，说“继续看”翻下一批并显示本轮剩余条数，看完才回卷，说“看待确认”单独看把握不高的一页，说“做第 N 条”可直接让当前 Agent 接着做这条的下一步；周回顾开头会单列用户明确回答“确实忘了”的条目，不占 15 个名额；后台每 2 小时刷新缓存。
 4. **闭环** — `loops:reconcile` 用后续会话证据列出“已完成”候选，默认只读，确认后才关闭。
@@ -40,8 +40,9 @@ LoopSteward（守环）是并行 AI 会话的开放循环追踪器。它从 Code
 - `1 忘了` / `2 噪音` / `3 已完成`：记录判断或关闭。
 - `做第 3 条`：让当前 Agent 接着做这条的下一步，做完再问你关不关。
 - `周回顾` / `继续看` / `看待确认`：看全量清单、翻页、看低把握项。
+- `只看完成证据` / `只看我的`：先确认已有完成证据的收尾项，或只看自己来源的条目。
 
-旧 HTTP 任务服务（Express + 规则式意图引擎 + 任务 CRUD）仍保留在仓库里，但已不是入口，也没有真实消费者；生产镜像只打包 Open Loops，旧服务和 express 都不进镜像。
+旧 HTTP 任务服务（Express + 规则式意图引擎 + 任务 CRUD）仍保留在仓库里，但已不是入口，也没有真实消费者；生产镜像只打包 Open Loops 入口，旧服务的 `dist/src/index.js` 不进镜像。MCP SDK 会带入 express 传递依赖，但镜像里没有旧服务入口。
 
 ---
 
@@ -54,7 +55,7 @@ MCP phase 1 提供 stdio MCP server，让 Codex、Claude Code、Cursor 通过 MC
 | `loops_context` | 返回指定项目最多 3 条未闭环事项 | `projectDir?`、`limit?`（上限 3） |
 | `loops_search` | 按文本、状态、项目搜索 | `query?`、`status?`、`project?`、`limit?` |
 | `loops_get` | 按稳定 ref 取详情和来源消息摘录 | `ref`、`limit?` |
-| `loops_closing` | 列出已展示但未关闭的循环，按展示次数排序 | `projectDir?`、`limit?`（默认 10，上限 20） |
+| `loops_closing` | 列出已展示但未关闭的循环，有完成证据的优先 | `projectDir?`、`origin?`、`completionOnly?`、`limit?`（默认 10，上限 20） |
 
 先构建，再直接运行：
 
@@ -143,7 +144,13 @@ skill 也内置了只读健康检查：用户问“为什么回访不更新/本�
 
 热区默认每个自然日最多回访 3 条，避免一天开很多会话时反复推新条目；`--daily-limit <n>` 可改上限（`0` 关闭），`--force` 只绕过本次上限，周回顾不受影响。同一自然日内 3 条用完后不再推新条目，但会重提这 3 条还没判断的条目，不占新预算，避免后续并行会话只看到“明天再继续”。如果还有用户明确回答“确实忘了”的条目，摘要会额外带 1 条跨项目确认项，不占预算，同一条 24 小时内不重复；30 分钟 recap 节流时也保留这条兜底。普通 `digest` 和 `digest --skill` 走同一套重提逻辑，不会只在 skill 入口显示。周回顾里，用户明确回答“确实忘了”的条目会单独成区，排在普通 15 条之前，不占轮转名额，也不计入页脚待确认数。跨到第二天会重新计算预算；条目和项目都按上次回访时间轮转，没回访过的先出，回访过的排到队尾，避免同一批高置信度条目或大项目天天占满名额。
 
+如果当天 0 条、当前项目还有可行动的用户待办，摘要会直接给出下一条的标题、置信度和 ref，回“做这条”就能让当前 Agent 先查证据再动手，不必先喊周回顾。助手来源、噪音、暂停中和已有完成证据的条目不会占用这个位置，避免把“已完成”或“助手建议”硬推成新待办。
+
+如果当前项目没有可行动待办、但有完成证据，零状态会直接给出优先级最高的一条（用户来源 > 混合 > 助手），带 ref、置信度和依据，回“关闭这条”即可确认；没说就不关。这样 4 条卡在“只看完成证据”后面的条目不必再翻一层清单。
+
 当新条目足够填满 3 条时，热区会先给用户已经回答“确实忘了 / 挺有用”的条目保留 1 个名额，再按 `--revisit-days`（默认 3 天）轮到期的旧条目。新条目不足 3 条时，剩余名额自然回填旧条目，不浪费每日预算；24 小时冷却仍是硬下限。用户确认过有用的条目即使所在项目超过 3 天没有新会话，也会继续留在热区候选池，直到关闭或标噪音；输出里会标“已确认有用”，避免把跨项目提醒误认为新事项。额度用完后，确认项会以“你确认忘了 · 跨项目”单独补 1 条，不受当前项目过滤，仍受 snooze 和噪音约束。周回顾先排真实项目，只有会话标题、没有真实目录的工作区后置补位，避免 Hermes/Qoder/ZCode 会话把真实项目挤出 15 个名额；用户确认忘了的条目另起一区，不占普通名额。
+
+热区不再把“已经核对为可能完成”的条目标成待办：24 小时内、置信度 ≥0.9 的 reconcile 候选会从热区候选池移出，改放到“可能已完成”区请用户确认关闭，最多 3 条；如果当天没有其他可回访事项，摘要直接输出“回访 · 0 条”加确认清单，而不是说“没有需要回访的循环”。周回顾主列表和“本周回顾 1 条”预览也排除完成候选，且不计入“本轮还有 N 条”，避免把已经做完的事重新当待办派给用户。
 
 如果 7 天内没有做过周回顾，当天第一批新条目末尾会额外带 1 条“本周回顾”旧库存：优先选活动窗口外、从未回访过、挂得最久的条目，24 小时内不重复；它不占热区 3 条预算，也不会在 recap 里重复。这个预览只解决“旧事项永远排不到”的触达问题，完整周回顾仍按“周回顾”查看。每条热区条目第一次出现就带“若已完成，直接说关闭这条”，页脚同时给出“已完成 / 确实忘了 / 噪音”三个出口；CLI 只负责提示和定位，不会自动替用户关闭。
 
@@ -187,7 +194,11 @@ npm run loops:install-policy -- --uninstall --json
 
 热区当天第一批新条目也会附带最多 1 条“可能已完成”：优先当前项目，证据置信度至少 0.9，且不会和已经展示的 3 条重复。它只给 ref、标题、置信度和依据，确认后才关闭；没有候选就不显示。
 
-`loops:doctor` 是只读健康检查：一次核对数据库 integrity 与循环/信号计数、最近摄入新鲜度、真实反馈样本、周回顾轮次进度、核对缓存保留期、备份归档体积、Windows 后台刷新任务状态、6 个 Agent 的 skill 副本哈希，以及 Codex/Claude/ZCode/DSH/Antigravity 的会话入口策略。存在阻塞性问题时退出码为 1；只有告警时仍为 0。`loops:presentations` 默认只列出晚于当前时间的展示记录；加 `--apply` 才会删除，执行前应先跑 `loops:backup`。
+热区只收用户参与过的循环：如果一条循环的全部证据都来自助手消息、用户从未确认，默认不进热区；用户在周回顾里回“确实忘了”后才恢复。用户条目不足、仍有空余名额时，热区最多补 1 条置信度 ≥0.8、从未进过热区、非完成候选且不在冷却期的助手建议，并在行尾标“助手建议”，不会挤掉用户条目；周回顾仍会列出这些条目，方便确认或标噪音。
+
+库存计数分两套：`activeTotal` 保留全部活跃循环用于兼容，日常回访文案只报 `userActiveTotal`（用户参与过的事项），助手来源单独显示为“待确认”，不再把两者加在一起。`userActiveTotal` 里来自临时会话工作区的部分会单独标出（例如“76 条待办（其中 48 条来自临时会话）”），避免把一次性对话当成真实项目积压；`digest --json` 同时给出 `userActiveSessionOnly` 和 `assistantBacklog`，需要清理时按它们判断临时会话与助手建议的存量。
+
+`loops:doctor` 是只读健康检查：一次核对数据库 integrity 与循环/信号计数、最近摄入新鲜度、各 Agent 的来源信号新鲜度、真实反馈样本、周回顾轮次进度、核对缓存保留期、备份归档体积、Windows 后台刷新任务状态、Codex/Claude/Cursor 的 MCP 配置与 server 路径、6 个 Agent 的 skill 副本哈希与 wrapper 路径是否存在，以及 Codex/Claude/ZCode/DSH/Antigravity 的会话入口策略。来源信号行是信息项，不把“某 Agent 几天没用”误报成故障。MCP 检查只验证配置文件里的 server 路径存在，不代表客户端已批准或成功握手；未配置 MCP 的客户端按可选处理，不会报警。存在阻塞性问题时退出码为 1；只有告警时仍为 0。`loops:presentations` 默认只列出晚于当前时间的展示记录；加 `--apply` 才会删除，执行前应先跑 `loops:backup`。
 
 `loops:feedback` 记录用户对回访质量的明确判断：`forgotten` 表示这条确实被忘了，`noise` 表示误报或不需要跟。反馈只追加，不改循环状态；`noise` 会在出现更新证据前压掉这条回访，新证据到达后自动恢复。新证据只取候选实际引用消息的有效时间，空时间戳、时区偏移和同一项目里的无关会话活动都不会把旧循环的 `lastSeen` 推新；历史库首次打开会自动回填一次证据时间，摘要写入 `schema_meta`。`loops:stats` 同时报历史反馈和最近窗口内的反馈；没有样本时 `usefulRate` / `usefulRateInWindow` 为 `null`，不会把“还没样本”算成 0%。
 
@@ -195,7 +206,7 @@ npm run loops:install-policy -- --uninstall --json
 
 `loops:calibrate` 生成一份 5 条校准清单：优先选从未回访过的条目，按项目分散，跳过已判断和暂停中的循环；不写回访时间、不影响每日预算。skill 收到“校准回访”时直接运行 `calibrate --limit 5 --json`，不再从 digest JSON 里自行挑条目。
 
-`loops:closing` 是收尾清单：只列已经展示过、但仍 open/pending 的循环，按展示次数降序、最近展示时间升序，默认 10 条。它只读，不改状态、不写展示记录；用户回“完成 / 稍后 / 不要了”后，skill 按 ref 批量更新。没说的一律保持原状，展示次数多不等于已完成。零状态或每日额度用完时，摘要会补一句“其中 N 条展示过但未关闭，说‘收尾’看清单”。
+`loops:closing` 是收尾清单：只列已经展示过、但仍 open/pending 的循环，默认 10 条。30 天内 reconcile 置信度 ≥0.9 的条目先列，并带“可能已完成”的依据；其余按展示次数降序、最近展示时间升序。它只读，不改状态、不写展示记录；用户回“完成 / 稍后 / 不要了”后，skill 按 ref 批量更新。没说的一律保持原状，展示次数多不等于已完成，完成证据也只是提示，不自动关闭。日常热区摘要末尾、零状态或每日额度用完时，都会补一句“另有 N 条展示过但未关闭，说‘收尾’看清单”。日常热区的收尾提示会带来源构成（用户 / 助手 / 混合），有热区条目时优先按当前项目报，并在同一条里给全局总数；零状态同样按当前项目计数。如果完成证据里有用户来源，提示会再报“用户 N 条”，并给“只看我的完成项”入口，不用先翻全部清单；当前项目范围更窄时，全局总数后也会报全局用户完成条数。说“收尾本项目”只看当前项目，说“收尾”看全部。wrapper 会把 `--project .` 解析为调用方当前目录，不会误用安装目录。收尾清单和 `closing --json` 会带 `origin`，可用 `--origin user|assistant|mixed` 只看一类来源；助手来源会明确标“助手来源”，方便先判断是承诺还是建议。`originTotals` 始终给出过滤前的三类计数，文本清单顶部直接报“来源构成”或“当前范围来源”，不用翻完才知道哪类最多。skill 收到“只看助手建议 / 只看用户事项”时会带 `--origin`，先报三类计数；筛选结果为空时说明其他来源还有多少条，不静默回退到全量。说“只看有完成证据的 / 快速确认”时用 `--completion`，只列已核对为可能完成的条目，仍逐条确认，不自动关闭。
 
 `show --json` 里 `presentationStats.count` 是总展示次数，和收尾清单同口径；`loop.presentationCount` 只是 recap/candidate/teaser 的连续重复疲劳计数，不能拿来判断被展示过几次。
 
@@ -214,6 +225,8 @@ npm run loops:install-policy -- --uninstall --json
 `loops:coverage` 是只读体检：读取 Magpie 本地会话索引 `~/.cache/magpie/sessions.json`，与本地实际发现的会话按 Agent + sessionId 对照，区分“已支持但本地漏读”和“尚未接入的 Agent”。Codex subagent、ZCode side chat、Hermes cron/subagent、DSH subagent/空会话、WorkBuddy 只有错误消息的会话、Antigravity 没有助手回复的半截会话会按策略过滤，不当作漏读。它只报覆盖情况，不写库、不生成循环；漏读列表是待核对线索，不等于内容一定丢失。
 
 `loops:audit` 默认只读：列出弱证据（来源只有“继续”“好”等确认语）、自摄入（来源全部是追踪器自己生成的 `# 今天提过` / `# 每周回顾` / `# 回访` / `# 回访校准` / `# 开放循环审计` 摘要）、缺少来源、挂得过久、重复候选和无法稳定识别的项目名。弱证据按 open/pending 分开计数，降级后不会再把 pending 误读成仍在热区。审计按来源拆成 user / assistant / mixed，并单列“助手来源”：这类循环的证据只有助手消息，未经用户确认，不等于用户任务。提取时，如果某条循环的所有来源都只是确认语，会自动把置信度降到 0.55，进入待确认，不占热区；助手自己的进度汇报、测试计数、反馈计数、提交状态（如“仍为 0”“只到 M65”“未提交”“全绿”）不会被当成新的未闭环事项，除非同一段话里明确写出未完成动作或待拍板决定。存量条目可显式加 `--apply-weak` 降级为 pending；`--apply-self-generated` 只丢弃自摄入循环，两者都不会动正常用户事项。`stats` 会把自摄入清理单独计数，不把它算成用户闭环。`sessionOnlyProjects` 是 Qoder/ZCode/WorkBuddy/Hermes/DSH/Antigravity 没有真实项目目录、只能用会话标题命名的工作区，属于已知限制，不是脏数据。
+
+`loops:archive-sessions` 专门清理没有真实项目目录的临时会话积压：默认只预览闲置超过 7 天的 open/pending 条目，最多列 20 条（`--days` / `--limit` 可调）；加 `--apply` 只归档这次列出的这批为 `dropped`，没列出的保持不动，可调大 `--limit` 或分次处理。用户明确回过“确实忘了”的条目永不参与归档；归档后可用 `update --status open` 恢复。它不会自动运行，也不替代周回顾。
 
 `loops:pending` 是只读的待确认首页：默认 10 条，按置信度降序、首次出现升序，每条只给标题、置信度、项目和 ref；JSON 同时给 `total`、`shown`、`noiseSuppressed`。用户明确把某条标为噪音后，它立即从待确认页消失，等出现更新证据才自动回来；反馈仍只追加，不改状态。
 
@@ -367,11 +380,13 @@ The project follows a phased development roadmap. M1–M2 were implemented as pa
 
 ```bash
 npm pack
-npm install -g .\loopsteward-2.9.0.tgz
+npm install -g .\loopsteward-2.9.1.tgz
 loopsteward --help
 ```
 
 `prepack` 会清理 `dist` 并只重建 `src/loops` + `src/magpie`；tarball 只含 `dist/`、`skills/`、`scripts/`、`docs/MCP.md`、`README.md` 和 `package.json`，不包含 `tests/`、`src/`、其他 `docs/` 或本机数据库。全局安装不依赖 devDependencies。
+
+发布前运行 `npm run release:check`，它会串联 `check`、全量测试、`build`、`verify:package` 和旧套件；其中 `verify:package` 会重新打包、在临时目录安装，并检查 CLI 的 `closing` 是否带 `ref`、MCP 握手版本是否与 `package.json` 一致、四个只读工具是否都在。任一项不通过就退出非零，不能发布。详细步骤和阻塞见 `docs/RELEASE.md`。
 
 全局安装后运行 `loopsteward setup` 安装 skill 和会话入口策略。当前重构阶段默认只装 Hermes，其他 Agent 需显式 `--agents` 才安装；skill 的命令路径会指向全局包，不需要保留仓库目录。
 
@@ -427,7 +442,7 @@ loopsteward --help
 
 The `npm install` command will install:
 
-- **Runtime:** 无生产运行时依赖；`express` 只在 devDependencies，供旧 HTTP 服务本地追溯
+- **Runtime:** `@modelcontextprotocol/sdk`（MCP stdio server）；`express` 只在顶层 devDependencies，供旧 HTTP 服务本地追溯，MCP SDK 的 HTTP transport 会带入传递依赖
 - **Dev:** `tsx`, `typescript`, `vitest`, `@types/express`, `@types/node`
 
 ### One-command bootstrap
@@ -488,7 +503,7 @@ npm run legacy:dev
 npm run legacy:start
 ```
 
-Runs the old `src/index.ts` Express service. It has no known consumers; keep it only for traceability. In production the task store defaults to SQLite; point `TASK_DB_PATH` at a mounted volume for durable storage. The `Dockerfile` now starts the Open Loops CLI and builds only `src/loops` + `src/magpie`; the legacy service is only reachable through a local full build (`npm run build`) plus `npm run legacy:dev` / `legacy:start`, and its `express` dependency is dev-only.
+Runs the old `src/index.ts` Express service. It has no known consumers; keep it only for traceability. In production the task store defaults to SQLite; point `TASK_DB_PATH` at a mounted volume for durable storage. The `Dockerfile` now starts the Open Loops CLI and builds only `src/loops` + `src/magpie`; the legacy service is only reachable through a local full build (`npm run build`) plus `npm run legacy:dev` / `legacy:start`. Its top-level `express` dependency is dev-only; the MCP SDK may bring express transitively, but the image has no legacy entrypoint.
 
 ### Magpie Source Scan
 
@@ -507,7 +522,7 @@ The project includes unit, API/observability, persistence, i18n, LLM-resilience,
 
 Open Loops 主线的测试在 `tests/loop-*.test.ts`、`tests/session-source.test.ts` 和 `tests/project-map.test.ts`；`npm test` 默认跑完整 Vitest 套件，旧意图引擎保留为 `npm run test:legacy`。
 
-GitHub Actions 现在同时跑 Ubuntu 和 `windows-latest`；Windows 任务会真正执行 PowerShell 5.1 解析、`.cmd` 入口和 Open Loops 全量测试。Docker job 构建后会加载镜像并运行默认 CLI，构建成功不再等于启动可用。独立的 `audit` job 直接读 `package-lock.json`，用官方 npm registry 跑全量依赖审计，moderate 及以上告警会让流水线失败。
+GitHub Actions 现在同时跑 Ubuntu 和 `windows-latest`；Windows 任务会真正执行 PowerShell 5.1 解析、`.cmd` 入口和 Open Loops 全量测试。主 `test` job 只跑 Open Loops 套件；旧 HTTP 的 `test:legacy` 与 m4/m5/m7/m10/m11 套件拆到独立的 `legacy` job，标记为非阻塞历史回归。新增 `package` job，用 `verify:package` 校验打出来的 tarball、CLI 收尾 ref 和 MCP 工具清单。Docker job 构建后会加载镜像并运行默认 CLI，构建成功不再等于启动可用。独立的 `audit` job 直接读 `package-lock.json`，用官方 npm registry 跑全量依赖审计，moderate 及以上告警会让流水线失败。
 
 测试工具链固定在已修复版本：`vitest 4.1.12`、`vite 8.3.8`；`npm audit` 全量（含 dev）为 0 漏洞，生产依赖同样为 0。
 

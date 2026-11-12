@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { createRequire } from 'node:module';
 import { renderOpenLoopsSkill, skillAgentTargets, type SkillAgent } from './skill-install.js';
@@ -8,6 +9,8 @@ import { inspectSessionPolicy, type PolicyAgent } from './session-policy.js';
 import { findPackageRoot } from './package-root.js';
 import { resolveDefaultDbPath } from './data-path.js';
 import { presentationFutureCutoffIso } from './presentation-time.js';
+import { isSessionOnlyProject } from './projects.js';
+import type { McpClient, McpServerConfig } from './mcp-install.js';
 
 export type DoctorStatus = 'ok' | 'warn' | 'fail';
 
@@ -48,6 +51,11 @@ export interface LoopDoctorOptions {
   scriptPath?: string;
   skillAgents?: SkillAgent[];
   policyAgents?: PolicyAgent[];
+  mcpCheck?: boolean;
+  mcpProjectDir?: string;
+  codexConfig?: string;
+  claudeConfig?: string;
+  cursorConfig?: string;
 }
 
 const DEFAULT_STALE_INGEST_HOURS = 6;
@@ -67,6 +75,10 @@ function formatHours(hours: number): string {
     : `${hours.toFixed(1)} 小时`;
 }
 
+function formatAgeCompact(hours: number): string {
+  return hours < 24 ? formatHours(hours) : `${(hours / 24).toFixed(1)} 天`;
+}
+
 function formatBytes(bytes: number): string {
   if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
   if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
@@ -75,6 +87,13 @@ function formatBytes(bytes: number): string {
 
 function fileHash(filePath: string): string {
   return createHash('sha256').update(fs.readFileSync(filePath)).digest('hex').toUpperCase();
+}
+
+function skillWrapperPaths(content: string): string[] {
+  const matches = content.matchAll(
+    /["']([A-Za-z]:[\\/][^"'\r\n]*[\\/]scripts[\\/](?:open-loops|refresh-open-loops)\.ps1)["']/g,
+  );
+  return [...new Set(Array.from(matches, (match) => match[1]))];
 }
 
 function inspectDatabase(
@@ -201,6 +220,33 @@ function inspectDatabase(
   }
 
   try {
+    const rows = db.prepare(`
+      SELECT agent, COUNT(*) AS c, MAX(captured_at) AS latest
+      FROM loop_signals
+      GROUP BY agent
+      ORDER BY latest DESC
+    `).all() as Array<{ agent: string; c: number; latest?: string }>;
+    checks.push({
+      key: 'sources',
+      label: '来源信号',
+      status: 'ok',
+      detail: rows.length === 0
+        ? '暂无信号'
+        : rows.map((row) => {
+          const age = hoursSince(row.latest, now);
+          return `${row.agent} ${age === null ? '未知' : formatAgeCompact(age)}`;
+        }).join(' · '),
+    });
+  } catch (error) {
+    checks.push({
+      key: 'sources',
+      label: '来源信号',
+      status: 'warn',
+      detail: `无法读取来源信号：${(error as Error).message}`,
+    });
+  }
+
+  try {
     const feedback = Number(db.prepare('SELECT COUNT(*) AS c FROM loop_feedback').get().c);
     checks.push({
       key: 'feedback',
@@ -236,10 +282,12 @@ function inspectDatabase(
           : [],
       );
       const active = db.prepare(
-        "SELECT id FROM loops WHERE status IN ('open', 'pending')",
-      ).all() as Array<{ id: string }>;
+        "SELECT id, project_name AS name FROM loops WHERE status IN ('open', 'pending')",
+      ).all() as Array<{ id: string; name: string }>;
       const shown = active.filter((loop) => seen.has(loop.id)).length;
       const remaining = active.length - shown;
+      const sessionOnly = active.filter((loop) => isSessionOnlyProject(loop.name)).length;
+      const real = active.length - sessionOnly;
       const lastReview = db.prepare(
         "SELECT MAX(presented_at) AS last FROM loop_presentations WHERE kind = 'review'",
       ).get() as { last?: string } | undefined;
@@ -251,7 +299,8 @@ function inspectDatabase(
         key: 'review-cycle',
         label: '周回顾轮次',
         status: stalled ? 'warn' : 'ok',
-        detail: `已看 ${shown}/${active.length}，剩余 ${remaining}`
+        detail: `全部 open/pending 已看 ${shown}/${active.length}，剩余 ${remaining}（真实项目 ${real} / 临时会话 ${sessionOnly}）`
+          + '（周回顾会另排除完成候选和已反馈遗忘项）'
           + (ageHours === null ? '' : `；本轮开始 ${formatHours(ageHours)}前`)
           + (stalled ? `；${formatHours(idleHours!)}没有继续` : ''),
       });
@@ -536,7 +585,18 @@ function inspectSkills(
       continue;
     }
     try {
-      if (fileHash(target.target) !== sourceHash) problems.push(`${target.agent}: 不一致`);
+      if (fileHash(target.target) !== sourceHash) {
+        problems.push(`${target.agent}: 不一致`);
+        continue;
+      }
+      if (process.platform === 'win32') {
+        const installed = fs.readFileSync(target.target, 'utf8');
+        const missingWrappers = skillWrapperPaths(installed)
+          .filter((wrapper) => !fs.existsSync(wrapper));
+        if (missingWrappers.length > 0) {
+          problems.push(`${target.agent}: wrapper 不存在`);
+        }
+      }
     } catch (error) {
       problems.push(`${target.agent}: 读取失败`);
     }
@@ -554,6 +614,140 @@ function inspectSkills(
     label: 'skill 副本',
     status: 'ok',
     detail: `${targets.length}/${targets.length} 与模板一致（${sourceHash.slice(0, 8)}）`,
+  };
+}
+
+interface McpTarget {
+  client: McpClient;
+  file: string;
+  format: 'toml' | 'json';
+}
+
+function parseMcpToml(content: string): McpServerConfig | null {
+  const lines = content.split(/\r?\n/);
+  const start = lines.findIndex((line) =>
+    /^\s*\[mcp_servers\.(?:loopsteward|"loopsteward")\]\s*$/.test(line),
+  );
+  if (start < 0) return null;
+  let command: string | undefined;
+  let args: string[] | undefined;
+  for (let index = start + 1; index < lines.length; index += 1) {
+    if (/^\s*\[/.test(lines[index])) break;
+    const commandMatch = lines[index].match(/^\s*command\s*=\s*(".*")\s*$/);
+    if (commandMatch) {
+      try {
+        command = JSON.parse(commandMatch[1]) as string;
+      } catch {
+        return null;
+      }
+    }
+    const argsMatch = lines[index].match(/^\s*args\s*=\s*(\[.*\])\s*$/);
+    if (argsMatch) {
+      try {
+        args = JSON.parse(argsMatch[1]) as string[];
+      } catch {
+        return null;
+      }
+    }
+  }
+  if (!command || !Array.isArray(args)) return null;
+  return { command, args };
+}
+
+function parseMcpJson(content: string): McpServerConfig | null {
+  try {
+    const parsed = JSON.parse(content) as {
+      mcpServers?: Record<string, { command?: unknown; args?: unknown }>;
+    };
+    const server = parsed.mcpServers?.loopsteward;
+    if (!server || typeof server.command !== 'string' || !Array.isArray(server.args)) return null;
+    if (server.args.some((arg) => typeof arg !== 'string')) return null;
+    return { command: server.command, args: server.args as string[] };
+  } catch {
+    return null;
+  }
+}
+
+function mcpServerProblem(server: McpServerConfig): string | null {
+  if (!server.command.trim()) return '缺少 command';
+  if (server.args.length === 0) return '缺少 server 路径';
+  const serverPath = server.args[0];
+  if (!path.isAbsolute(serverPath)) return `server 路径不是绝对路径：${serverPath}`;
+  if (!fs.existsSync(serverPath)) return `server 路径不存在：${serverPath}`;
+  return null;
+}
+
+function inspectMcp(options: {
+  home?: string;
+  projectDir: string;
+  codexConfig?: string;
+  claudeConfig?: string;
+  cursorConfig?: string;
+}): DoctorCheck {
+  const home = options.home ?? os.homedir();
+  const targets: McpTarget[] = [
+    {
+      client: 'codex',
+      file: path.resolve(options.codexConfig ?? path.join(home, '.codex', 'config.toml')),
+      format: 'toml',
+    },
+    {
+      client: 'claude',
+      file: path.resolve(options.claudeConfig ?? path.join(options.projectDir, '.mcp.json')),
+      format: 'json',
+    },
+    {
+      client: 'cursor',
+      file: path.resolve(options.cursorConfig ?? path.join(home, '.cursor', 'mcp.json')),
+      format: 'json',
+    },
+  ];
+  const configured = targets.filter((target) => fs.existsSync(target.file));
+  if (configured.length === 0) {
+    return {
+      key: 'mcp',
+      label: 'MCP 客户端',
+      status: 'ok',
+      detail: '未配置 MCP 客户端（可选）；运行 loops:install-mcp 启用',
+    };
+  }
+
+  const valid: McpClient[] = [];
+  const problems: string[] = [];
+  for (const target of configured) {
+    let content: string;
+    try {
+      content = fs.readFileSync(target.file, 'utf8');
+    } catch (error) {
+      problems.push(`${target.client}: 读取失败`);
+      continue;
+    }
+    const server = target.format === 'toml' ? parseMcpToml(content) : parseMcpJson(content);
+    if (!server) {
+      problems.push(`${target.client}: 未找到完整配置`);
+      continue;
+    }
+    const issue = mcpServerProblem(server);
+    if (issue) {
+      problems.push(`${target.client}: ${issue}`);
+      continue;
+    }
+    valid.push(target.client);
+  }
+
+  if (problems.length > 0) {
+    return {
+      key: 'mcp',
+      label: 'MCP 客户端',
+      status: 'warn',
+      detail: `${valid.length}/${configured.length} 可用；${problems.join('，')}；运行 loops:install-mcp 修复`,
+    };
+  }
+  return {
+    key: 'mcp',
+    label: 'MCP 客户端',
+    status: 'ok',
+    detail: `${valid.join(' / ')} 已配置；server 路径存在`,
   };
 }
 
@@ -717,6 +911,15 @@ export function buildLoopDoctor(options: LoopDoctorOptions = {}): LoopDoctorRepo
   }
   checks.push(
     inspectArchive(archiveDir, options.archiveWarnBytes ?? DEFAULT_ARCHIVE_WARN_BYTES),
+    ...(options.mcpCheck === false
+      ? []
+      : [inspectMcp({
+          home: options.home,
+          projectDir: path.resolve(options.mcpProjectDir ?? packageRoot),
+          codexConfig: options.codexConfig,
+          claudeConfig: options.claudeConfig,
+          cursorConfig: options.cursorConfig,
+        })]),
     inspectSkills(
       skillSourcePath,
       options.home,

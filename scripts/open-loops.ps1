@@ -22,6 +22,13 @@ if ($cliArgs.Count -gt 0 -and
     $cliArgs += @('--project', $callerDir)
 }
 
+$projectIndex = [Array]::IndexOf($cliArgs, '--project')
+if ($projectIndex -ge 0 -and
+    $projectIndex + 1 -lt $cliArgs.Count -and
+    $cliArgs[$projectIndex + 1] -eq '.') {
+    $cliArgs[$projectIndex + 1] = $callerDir
+}
+
 Push-Location $root
 try {
     $previousPreference = $ErrorActionPreference

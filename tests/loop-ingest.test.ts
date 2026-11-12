@@ -481,4 +481,51 @@ describe('ingestRecentSessions', () => {
     expect(digest.total).toBe(0);
     expect(digest.noiseSuppressed).toBe(1);
   });
+
+  it('holds a fresh user question when settleMinutes is zero', async () => {
+    const store = new LoopStore(':memory:');
+    stores.push(store);
+    let extractCalls = 0;
+    const extract = async () => {
+      extractCalls += 1;
+      return [{
+        title: '解释报错含义',
+        nextAction: '说明报错原因',
+        why: '用户提问后还没有回答',
+        confidence: 0.7,
+        sourceMessageIds: ['m1'],
+      }];
+    };
+    const question = makeSession();
+    question.messages = [{
+      id: 'm1',
+      role: 'user',
+      text: '这个报错是什么意思？',
+      timestamp: '2026-11-11T11:59:30.000Z',
+    }];
+    question.lastActive = '2026-11-11T11:59:30.000Z';
+
+    const held = await ingestRecentSessions({
+      discover: () => [question],
+      extract,
+      store,
+      now: new Date('2026-11-11T12:00:00.000Z'),
+      settleMinutes: 0,
+    });
+
+    expect(held.sessionsSkipped).toBe(1);
+    expect(held.sessionsProcessed).toBe(0);
+    expect(extractCalls).toBe(0);
+
+    const later = await ingestRecentSessions({
+      discover: () => [question],
+      extract,
+      store,
+      now: new Date('2026-11-11T12:06:00.000Z'),
+      settleMinutes: 0,
+    });
+
+    expect(later.sessionsProcessed).toBe(1);
+    expect(extractCalls).toBe(1);
+  });
 });

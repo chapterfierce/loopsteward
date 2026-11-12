@@ -12,6 +12,7 @@ import { resolveDefaultDbPath } from './data-path.js';
 import type {
   DigestGroup,
   DigestResult,
+  LoopOrigin,
   LoopRecord,
   ProjectActivity,
   ProjectSummary,
@@ -434,11 +435,38 @@ export function buildDigest(options: DigestOptions = {}): DigestResult {
     );
     const activeLoops = store.listActiveLoops(undefined, now);
     const presentedLoops = store.getPresentationStats(now.toISOString());
-    const closingTotal = activeLoops.filter((loop) =>
-      (loop.status === 'open' || loop.status === 'pending') && presentedLoops.has(loop.id)).length;
+    const closingLoops = activeLoops.filter((loop) =>
+      (loop.status === 'open' || loop.status === 'pending') && presentedLoops.has(loop.id));
+    const closingOrigins = countOrigins(closingLoops);
+    const closingTotal = closingLoops.length;
+    const completionCandidates = store.listRecentReconcileCandidates(
+      now,
+      mode === 'review' ? 30 * 24 : 24,
+      mode === 'review' ? 500 : 50,
+    ).filter((item) => item.confidence >= 0.9);
+    const completionCandidateIds = new Set(
+      completionCandidates.map((item) => item.loopId),
+    );
+    const closingCompletionLoops = closingLoops
+      .filter((loop) => completionCandidateIds.has(loop.id));
+    const closingCompletionTotal = closingCompletionLoops.length;
+    const closingCompletionOrigins = countOrigins(closingCompletionLoops);
     const latestFeedback = new Map(
       store.getLatestFeedback().map((feedback) => [feedback.loopId, feedback]),
     );
+    const assistantBacklogIds = new Set(
+      activeLoops
+        .filter((loop) =>
+          loop.origin === 'assistant'
+          && latestFeedback.get(loop.id)?.verdict !== 'forgotten')
+        .map((loop) => loop.id),
+    );
+    const assistantBacklog = assistantBacklogIds.size;
+    const userActiveTotal = activeLoops.length - assistantBacklog;
+    const userActiveSessionOnly = activeLoops
+      .filter((loop) => !assistantBacklogIds.has(loop.id))
+      .filter((loop) => isSessionOnlyProject(loop.projectName))
+      .length;
     const noiseSuppressedIds = new Set(
       activeLoops
         .filter((loop) => isNoiseSuppressed(loop, latestFeedback.get(loop.id)))
@@ -474,14 +502,29 @@ export function buildDigest(options: DigestOptions = {}): DigestResult {
       activeLoops.some((loop) => pathKey(loop.projectDir) === focusKey)
       || [...activities.keys()].some((dir) => pathKey(dir) === focusKey)
     );
-    const focusBacklog = focusKey !== undefined
-      ? activeLoops.filter((loop) => pathKey(loop.projectDir) === focusKey).length
-      : 0;
-    const focusClosingTotal = focusKey !== undefined
-      ? activeLoops.filter((loop) =>
-        (loop.status === 'open' || loop.status === 'pending')
-        && pathKey(loop.projectDir) === focusKey
-        && presentedLoops.has(loop.id)).length
+    const focusLoops = focusKey !== undefined
+      ? activeLoops.filter((loop) => pathKey(loop.projectDir) === focusKey)
+      : [];
+    const focusBacklog = focusLoops.length;
+    const focusAssistantBacklog = focusLoops
+      .filter((loop) => assistantBacklogIds.has(loop.id))
+      .length;
+    const focusUserBacklog = focusBacklog - focusAssistantBacklog;
+    const focusClosingLoops = focusKey !== undefined
+      ? closingLoops.filter((loop) => pathKey(loop.projectDir) === focusKey)
+      : [];
+    const focusClosingTotal = focusKey !== undefined ? focusClosingLoops.length : undefined;
+    const focusClosingOrigins = focusKey !== undefined
+      ? countOrigins(focusClosingLoops)
+      : undefined;
+    const focusClosingCompletionLoops = focusKey !== undefined
+      ? focusClosingLoops.filter((loop) => completionCandidateIds.has(loop.id))
+      : undefined;
+    const focusClosingCompletionTotal = focusClosingCompletionLoops !== undefined
+      ? focusClosingCompletionLoops.length
+      : undefined;
+    const focusClosingCompletionOrigins = focusClosingCompletionLoops !== undefined
+      ? countOrigins(focusClosingCompletionLoops)
       : undefined;
     const coolingCandidates = actionableLoops.filter((loop) =>
       !isSnoozed(loop, nowMs)
@@ -560,6 +603,39 @@ export function buildDigest(options: DigestOptions = {}): DigestResult {
       && focusKnown
       && recapCandidates.length > 0
       && recapBaseLength === 0;
+    const focusNextLoop = recapFocusEmpty
+      ? focusLoops
+        .filter((loop) => !assistantBacklogIds.has(loop.id))
+        .filter((loop) => !noiseSuppressedIds.has(loop.id))
+        .filter((loop) => !completionCandidateIds.has(loop.id))
+        .filter((loop) => !isSnoozed(loop, nowMs))
+        .filter((loop) => loop.status === 'open' || loop.status === 'pending')
+        .sort((left, right) => {
+          const leftConfirmed = latestFeedback.get(left.id)?.verdict === 'forgotten' ? 1 : 0;
+          const rightConfirmed = latestFeedback.get(right.id)?.verdict === 'forgotten' ? 1 : 0;
+          if (leftConfirmed !== rightConfirmed) return rightConfirmed - leftConfirmed;
+          const rankDiff = rank(right, 'hot', nowMs) - rank(left, 'hot', nowMs);
+          if (rankDiff !== 0) return rankDiff;
+          return Date.parse(left.firstSeen) - Date.parse(right.firstSeen);
+        })[0]
+      : undefined;
+    const completionCandidateById = new Map(
+      completionCandidates.map((item) => [item.loopId, item]),
+    );
+    const originPriority = (loop: LoopRecord): number =>
+      loop.origin === 'user' ? 0 : loop.origin === 'mixed' ? 1 : 2;
+    const focusCompletionCandidate = recapFocusEmpty
+      ? focusClosingLoops
+        .filter((loop) => completionCandidateById.has(loop.id))
+        .sort((left, right) => {
+          const priority = originPriority(left) - originPriority(right);
+          if (priority !== 0) return priority;
+          return (completionCandidateById.get(right.id)?.confidence ?? 0)
+            - (completionCandidateById.get(left.id)?.confidence ?? 0);
+        })
+        .map((loop) => completionCandidateById.get(loop.id))
+        .filter((item): item is ReconcileCacheCandidate => Boolean(item))[0]
+      : undefined;
     const recentRecapIds = recap.length > 0 && recapCooldownMinutes > 0
       ? store.getPresentedLoopIdsByKind(
           'recap',
@@ -667,12 +743,12 @@ export function buildDigest(options: DigestOptions = {}): DigestResult {
         .map((bucket) => ({
           ...bucket,
           loops: bucket.loops.filter(
-            (loop) => latestFeedback.get(loop.id)?.verdict !== 'forgotten',
+            (loop) => latestFeedback.get(loop.id)?.verdict !== 'forgotten'
+              && !completionCandidateIds.has(loop.id),
           ),
         }))
         .filter((bucket) => bucket.loops.length > 0)
       : allProjects;
-
     if (mode === 'review') {
       const unseenProjects = reviewCycleSeen
         ? reviewProjects
@@ -689,11 +765,18 @@ export function buildDigest(options: DigestOptions = {}): DigestResult {
     } else {
       const confirmed = (loop: LoopRecord): boolean =>
         latestFeedback.get(loop.id)?.verdict === 'forgotten';
+      const userOwned = (loop: LoopRecord): boolean =>
+        loop.origin !== 'assistant' || confirmed(loop);
 
       const freshLoops = loops.filter(
-        (loop) => !loop.hotSurfacedAt && recent(loop),
+        (loop) => userOwned(loop)
+          && !completionCandidateIds.has(loop.id)
+          && !loop.hotSurfacedAt
+          && recent(loop),
       );
       const followLoops = loops.filter((loop) => {
+        if (!userOwned(loop)) return false;
+        if (completionCandidateIds.has(loop.id)) return false;
         if (!confirmed(loop)) return false;
         if (!loop.hotSurfacedAt) return !recent(loop);
         const hotMs = Date.parse(loop.hotSurfacedAt);
@@ -701,6 +784,8 @@ export function buildDigest(options: DigestOptions = {}): DigestResult {
           && nowMs - hotMs >= revisitDays * DAY_MS;
       });
       const revisitLoops = loops.filter((loop) => {
+        if (!userOwned(loop)) return false;
+        if (completionCandidateIds.has(loop.id)) return false;
         if (confirmed(loop) || !loop.hotSurfacedAt || !recent(loop)) return false;
         const hotMs = Date.parse(loop.hotSurfacedAt);
         return Number.isFinite(hotMs)
@@ -710,6 +795,8 @@ export function buildDigest(options: DigestOptions = {}): DigestResult {
         [...followLoops, ...revisitLoops].map((loop) => loop.id),
       );
       const oldFillLoops = loops.filter((loop) => {
+        if (!userOwned(loop)) return false;
+        if (completionCandidateIds.has(loop.id)) return false;
         if (dueIds.has(loop.id)) return false;
         if (loop.hotSurfacedAt) {
           const hotMs = Date.parse(loop.hotSurfacedAt);
@@ -718,6 +805,16 @@ export function buildDigest(options: DigestOptions = {}): DigestResult {
           return recent(loop) || confirmed(loop);
         }
         return confirmed(loop) && !recent(loop);
+      });
+      const assistantFillLoops = loops.filter((loop) => {
+        if (loop.origin !== 'assistant') return false;
+        if (confirmed(loop)) return false;
+        if (completionCandidateIds.has(loop.id)) return false;
+        if (loop.hotSurfacedAt) return false;
+        if (loop.confidence < 0.8) return false;
+        const presentedMs = Date.parse(loop.lastPresentedAt ?? '');
+        return !Number.isFinite(presentedMs)
+          || nowMs - presentedMs >= cooldownHours * HOUR_MS;
       });
       revisitReady = followLoops.length + revisitLoops.length;
       revisitWaiting = loops.filter((loop) => {
@@ -786,9 +883,26 @@ export function buildDigest(options: DigestOptions = {}): DigestResult {
         0,
         projectLastSurfaceMap,
       );
+      const assistantFillProjects = buildProjectBuckets(
+        assistantFillLoops,
+        activities,
+        'hot',
+        nowMs,
+        cutoff,
+        false,
+        false,
+        0,
+        projectLastSurfaceMap,
+      );
       if (focusProject) {
         const eligibleDirs = new Set(
-          [...freshLoops, ...followLoops, ...revisitLoops, ...oldFillLoops]
+          [
+            ...freshLoops,
+            ...followLoops,
+            ...revisitLoops,
+            ...oldFillLoops,
+            ...assistantFillLoops,
+          ]
             .map((loop) => loop.projectDir),
         );
         focusBucket = matchFocusBucket(
@@ -868,6 +982,18 @@ export function buildDigest(options: DigestOptions = {}): DigestResult {
           selectedIds,
         );
       }
+      if (remaining > 0 && selectedLoops.length < slots) {
+        takeGroups(
+          selectPool(
+            assistantFillProjects,
+            maxProjects,
+            Math.min(1, slots - selectedLoops.length),
+            focusDir,
+          ),
+          selectedLoops,
+          selectedIds,
+        );
+      }
 
       selected = groupSelectedLoops(selectedLoops, activities);
       focusShown = focusDir
@@ -878,8 +1004,16 @@ export function buildDigest(options: DigestOptions = {}): DigestResult {
     }
     const ids = selected.flatMap((group) => group.loops.map((loop) => loop.id));
     const displayedIds = new Set(ids);
+    const reviewTeaserPool = actionableLoops.filter((loop) => {
+      if (completionCandidateIds.has(loop.id)) return false;
+      if (loop.origin === 'assistant'
+        && latestFeedback.get(loop.id)?.verdict !== 'forgotten') {
+        return false;
+      }
+      return true;
+    });
     const reviewPick = mode === 'hot' && reviewDue && !recentReviewTeaser
-      ? pickReviewTeaser(actionableLoops, displayedIds, nowMs, recent, focusKey, focusKnown)
+      ? pickReviewTeaser(reviewTeaserPool, displayedIds, nowMs, recent, focusKey, focusKnown)
       : undefined;
     const activeIds = new Set(activeLoops.map((loop) => loop.id));
     const confirmedIds = [...latestFeedback.values()]
@@ -938,6 +1072,14 @@ export function buildDigest(options: DigestOptions = {}): DigestResult {
     const feedbackCounts = store.getFeedbackCounts();
     const activeById = new Map(activeLoops.map((loop) => [loop.id, loop]));
     const reviewConfirmedIds = new Set(reviewConfirmed.map((loop) => loop.id));
+    const reviewEligibleLoops = loops.filter(
+      (loop) => latestFeedback.get(loop.id)?.verdict !== 'forgotten'
+        && !completionCandidateIds.has(loop.id),
+    );
+    const seenReviewIds = reviewCycleSeen ?? new Set<string>();
+    const remainingReviewLoops = reviewEligibleLoops.filter(
+      (loop) => !seenReviewIds.has(loop.id) && !displayedIds.has(loop.id),
+    );
     const pendingTotal = mode === 'review'
       ? actionableLoops.filter(
           (loop) => loop.status === 'pending'
@@ -952,9 +1094,9 @@ export function buildDigest(options: DigestOptions = {}): DigestResult {
         )
       : new Set<string>();
     const recapCloseEligible = dailyCapReached && !recapThrottled && recap.length > 0;
-    const hotCloseCandidates = mode === 'hot' && (ids.length > 0 || recapCloseEligible)
-      ? store.listRecentReconcileCandidates(now, 24, 10)
-        .filter((item) => item.confidence >= 0.9)
+    const hotCloseCandidates = mode === 'hot'
+      && (ids.length > 0 || recapCloseEligible || completionCandidates.length > 0)
+      ? completionCandidates
         .filter((item) => !displayedIds.has(item.loopId))
         .filter((item) => !recapIds.has(item.loopId))
         .filter((item) => !recentCandidateIds.has(item.loopId))
@@ -969,12 +1111,12 @@ export function buildDigest(options: DigestOptions = {}): DigestResult {
           }
           return true;
         })
-        .slice(0, 1)
+        .slice(0, 3)
       : [];
     if (options.markSurfaced !== false && hotCloseCandidates.length > 0) {
       try {
         store.recordPresentation(
-          [hotCloseCandidates[0].loopId],
+          hotCloseCandidates.map((item) => item.loopId),
           now.toISOString(),
           'hot',
           'candidate',
@@ -984,7 +1126,7 @@ export function buildDigest(options: DigestOptions = {}): DigestResult {
       }
     }
     const reconcileCandidates = mode === 'review'
-      ? store.listRecentReconcileCandidates(now, 24, 10)
+      ? completionCandidates
         .filter((item) => !displayedIds.has(item.loopId))
         .filter((item) => !noiseSuppressedIds.has(item.loopId))
         .filter((item) => {
@@ -1008,21 +1150,16 @@ export function buildDigest(options: DigestOptions = {}): DigestResult {
             matched: Boolean(focusBucket),
             shown: focusShown,
             backlog: focusBacklog,
+            userBacklog: focusUserBacklog,
+            assistantBacklog: focusAssistantBacklog,
           }
         : undefined,
+      focusNextLoop,
+      focusCompletionCandidate,
       reviewDue: reviewDue && ids.length > 0,
-      reviewRemaining: mode === 'review'
-        ? Math.max(
-            0,
-            loops.filter(
-              (loop) => latestFeedback.get(loop.id)?.verdict !== 'forgotten',
-            ).length - Math.max(
-              [...(reviewCycleSeen ?? [])].filter(
-                (id) => latestFeedback.get(id)?.verdict !== 'forgotten',
-              ).length,
-              ids.length,
-            ),
-          )
+      reviewRemaining: mode === 'review' ? remainingReviewLoops.length : undefined,
+      reviewRemainingSessionOnly: mode === 'review'
+        ? remainingReviewLoops.filter((loop) => isSessionOnlyProject(loop.projectName)).length
         : undefined,
       pendingTotal,
       closeCandidates: hotCloseCandidates,
@@ -1033,9 +1170,18 @@ export function buildDigest(options: DigestOptions = {}): DigestResult {
       recapFocusEmpty,
       closingTotal,
       focusClosingTotal,
+      closingCompletionTotal,
+      focusClosingCompletionTotal,
+      closingCompletionOrigins,
+      focusClosingCompletionOrigins,
+      closingOrigins,
+      focusClosingOrigins,
       recapCooldownMinutes,
       total: ids.length,
       activeTotal: activeLoops.length,
+      userActiveTotal,
+      userActiveSessionOnly,
+      assistantBacklog,
       eligibleTotal: loops.length,
       coolingDown,
       dailySurfaced,
@@ -1065,6 +1211,26 @@ function confirmedTag(result: DigestResult, loop: LoopRecord): string {
   return result.confirmedIds.includes(loop.id) ? ' · 已确认有用' : '';
 }
 
+function originTag(result: DigestResult, loop: LoopRecord): string {
+  if (loop.origin !== 'assistant') return '';
+  if (result.confirmedIds.includes(loop.id) || result.recapConfirmedIds.includes(loop.id)) {
+    return '';
+  }
+  return ' · 助手建议';
+}
+
+function assistantBacklogNote(count: number): string {
+  return count > 0 ? `（另有 ${count} 条助手来源待确认）` : '';
+}
+
+function userBacklogLabel(result: DigestResult): string {
+  const count = result.userActiveTotal;
+  const sessionOnly = result.userActiveSessionOnly ?? 0;
+  if (sessionOnly <= 0) return `${count} 条用户待办`;
+  if (sessionOnly >= count) return `${count} 条待办（全部来自临时会话）`;
+  return `${count} 条待办（其中 ${sessionOnly} 条来自临时会话）`;
+}
+
 function formatReviewPickLines(
   result: DigestResult,
   now: Date,
@@ -1083,7 +1249,7 @@ function formatReviewPickLines(
   const lines = [''];
   if (showSectionHeader) lines.push('**本周回顾 · 先看 1 条**');
   lines.push(
-    `${itemNumber}. **${loop.title}** · ${label}${age}${confirmedTag(result, loop)} · [ref ${loopRef(loop.id)}]`,
+    `${itemNumber}. **${loop.title}** · ${label}${age}${confirmedTag(result, loop)}${originTag(result, loop)} · [ref ${loopRef(loop.id)}]`,
     `  项目：${project}`,
     `  下一步：${loop.nextAction}`,
     `  为什么现在提：${loop.why}`,
@@ -1148,32 +1314,82 @@ export function formatDigest(result: DigestResult, now = new Date(result.generat
   if (result.total === 0 && result.reviewPick) {
     return formatReviewPickOnly(result, now, false);
   }
+  const completionOnly = formatReconcileCandidates(result.closeCandidates ?? []);
+  if (
+    result.total === 0
+    && completionOnly
+    && !(result.mode === 'hot' && result.dailyCapReached && result.recap.length > 0)
+  ) {
+    return ['# 回访 · 0 条', '', completionOnly].join('\n');
+  }
   if (result.total === 0) {
     if (result.mode === 'hot') {
       if (result.dailyCapReached) {
         if (result.recap.length > 0) return formatRecap(result);
         if (result.recapFocusEmpty) {
-          const backlog = result.focusProject?.backlog ?? result.activeTotal;
-          return backlog > 0
-            ? `本项目今天没有已提过的回访条目；本项目还有 ${backlog} 条未闭环。说“周回顾”看清单。${closingHint(result, result.focusClosingTotal ?? result.closingTotal)}`
-            : '本项目今天没有已提过的回访条目；本项目暂无未闭环。';
+          const focus = result.focusProject;
+          const backlog = focus?.userBacklog ?? focus?.backlog ?? result.userActiveTotal;
+          const assistant = focus?.assistantBacklog ?? result.assistantBacklog;
+          const note = assistantBacklogNote(assistant);
+          const inventory = backlog > 0
+            ? `本项目还有 ${backlog} 条用户待办未闭环${note}`
+            : `本项目暂无用户待办${note}`;
+          const lines = [
+            '# 回访 · 今天 0 条新提醒',
+            '',
+            `本项目今天没有已提过的回访条目；${inventory}。`,
+          ];
+          if (result.focusNextLoop) {
+            const next = result.focusNextLoop;
+            const label = next.status === 'pending'
+              ? `待确认 ${Math.round(next.confidence * 100)}%`
+              : `${Math.round(next.confidence * 100)}%`;
+            lines.push(
+              '',
+              `下一条用户待办：[ref ${loopRef(next.id)}] **${next.title}** · ${label}`,
+              '说“做这条”我先查证据再动手；说“周回顾”看全部。',
+            );
+          } else if (result.focusCompletionCandidate) {
+            const candidate = result.focusCompletionCandidate;
+            lines.push(
+              '',
+              `**可能已完成** · ${Math.round(candidate.confidence * 100)}% · [ref ${loopRef(candidate.loopId)}]`,
+              `**${candidate.title}**`,
+              `依据：${candidate.reason}`,
+              '说“关闭这条”确认；没说就不关。',
+            );
+          }
+          lines.push(
+            '',
+            `说“周回顾”看清单。${closingHint(
+              result,
+              result.focusClosingTotal ?? result.closingTotal,
+              result.focusClosingOrigins ?? result.closingOrigins,
+              'project',
+            )}`,
+          );
+          return lines.join('\n');
         }
-        if (result.activeTotal === 0) {
+        if (result.userActiveTotal === 0 && result.assistantBacklog === 0) {
           return `今天已有 ${result.dailySurfaced} 条回访记录（每日上限 ${result.dailySurfaceLimit} 条）。`;
         }
-        return `今天已有 ${result.dailySurfaced} 条回访记录（每日上限 ${result.dailySurfaceLimit} 条）；库存还有 ${result.activeTotal} 条未闭环，明天再继续；${closingHint(result)}要现在看就说“周回顾”。`;
+        return `今天已有 ${result.dailySurfaced} 条回访记录（每日上限 ${result.dailySurfaceLimit} 条）；库存还有 ${userBacklogLabel(result)}未闭环${assistantBacklogNote(result.assistantBacklog)}，明天再继续；${closingHint(result)}要现在看就说“周回顾”。`;
       }
-      if (result.activeTotal === 0) return '没有需要回访的循环。';
+      if (result.userActiveTotal === 0) {
+        return result.assistantBacklog > 0
+          ? `没有需要回访的用户循环；另有 ${result.assistantBacklog} 条助手来源待确认，说“周回顾”可以处理。`
+          : '没有需要回访的循环。';
+      }
       if (result.coolingDown > 0) {
         const noise = result.noiseSuppressed > 0
           ? `，${result.noiseSuppressed} 条已标记为噪音`
           : '';
-        return `今天已回访过；还有 ${result.activeTotal} 条未闭环（${result.coolingDown} 条在 24 小时冷却中${noise}），不重复提醒；${closingHint(result)}要现在看就说“周回顾”。`;
+        return `今天已回访过；还有 ${userBacklogLabel(result)}未闭环${assistantBacklogNote(result.assistantBacklog)}（${result.coolingDown} 条在 24 小时冷却中${noise}），不重复提醒；${closingHint(result)}要现在看就说“周回顾”。`;
       }
       if (result.noiseSuppressed > 0) {
-        return `还有 ${result.activeTotal} 条未闭环，其中 ${result.noiseSuppressed} 条已被标记为噪音且没有新证据，当前不回访。`;
+        return `还有 ${userBacklogLabel(result)}未闭环${assistantBacklogNote(result.assistantBacklog)}，其中 ${result.noiseSuppressed} 条已被标记为噪音且没有新证据，当前不回访。`;
       }
-      return `还有 ${result.activeTotal} 条未闭环，但当前没有达到回访条件的条目。`;
+      return `还有 ${userBacklogLabel(result)}未闭环${assistantBacklogNote(result.assistantBacklog)}，但当前没有达到回访条件的条目。`;
     }
     if (result.activeProjects.length === 0 && result.activeTotal === 0) {
       return '本周没有需要回顾的循环。';
@@ -1234,7 +1450,7 @@ export function formatDigest(result: DigestResult, now = new Date(result.generat
       const ageDays = Math.floor((now.getTime() - Date.parse(loop.firstSeen)) / DAY_MS);
       const age = ageDays >= 1 ? ` · 已挂 ${ageDays} 天` : '';
       lines.push(
-        `${itemNumber}. **${loop.title}** · ${label}${age}${confirmedTag(result, loop)} · [ref ${loopRef(loop.id)}]`,
+        `${itemNumber}. **${loop.title}** · ${label}${age}${confirmedTag(result, loop)}${originTag(result, loop)} · [ref ${loopRef(loop.id)}]`,
         `  下一步：${loop.nextAction}`,
         `  为什么现在提：${loop.why}`,
       );
@@ -1247,6 +1463,8 @@ export function formatDigest(result: DigestResult, now = new Date(result.generat
   if (result.mode === 'hot') {
     const candidates = formatReconcileCandidates(result.closeCandidates ?? []);
     if (candidates) lines.push('', candidates);
+    const closing = closingNudge(result);
+    if (closing) lines.push('', closing);
   }
   if (result.mode === 'review' && result.activeProjects.length > 0) {
     lines.push(
@@ -1257,6 +1475,8 @@ export function formatDigest(result: DigestResult, now = new Date(result.generat
   if (result.mode === 'review') {
     const candidates = formatReconcileCandidates(result.reconcileCandidates);
     if (candidates) lines.push('', candidates);
+    const closing = closingNudge(result);
+    if (closing) lines.push('', closing);
   }
   const reviewNudge = formatReviewNudge(result);
   if (reviewNudge) lines.push('', reviewNudge);
@@ -1294,7 +1514,7 @@ function formatReviewBrief(result: DigestResult, now: Date): string {
       const ageDays = Math.floor((now.getTime() - Date.parse(loop.firstSeen)) / DAY_MS);
       const age = ageDays >= 1 ? ` · 已挂 ${ageDays} 天` : '';
       lines.push(
-        `${itemNumber}. **${loop.title}** · ${label}${age}${confirmedTag(result, loop)} · [ref ${loopRef(loop.id)}]`,
+        `${itemNumber}. **${loop.title}** · ${label}${age}${confirmedTag(result, loop)}${originTag(result, loop)} · [ref ${loopRef(loop.id)}]`,
       );
     }
   }
@@ -1303,8 +1523,13 @@ function formatReviewBrief(result: DigestResult, now: Date): string {
   }
   const candidates = formatReconcileCandidates(result.reconcileCandidates);
   if (candidates) lines.push('', candidates);
+  const closing = closingNudge(result);
+  if (closing) lines.push('', closing);
   if (result.reviewRemaining && result.reviewRemaining > 0) {
-    lines.push('', `本轮还有 ${result.reviewRemaining} 条没看；说“继续看”看下一批。`);
+    const sessionOnly = result.reviewRemainingSessionOnly
+      ? `（其中 ${result.reviewRemainingSessionOnly} 条临时会话）`
+      : '';
+    lines.push('', `本轮还有 ${result.reviewRemaining} 条没看${sessionOnly}；说“继续看”看下一批。`);
   } else if (result.mode === 'review') {
     lines.push('', '本轮已经看完；说“继续看”从头再看一轮。');
   }
@@ -1323,10 +1548,13 @@ function formatReviewBrief(result: DigestResult, now: Date): string {
 
 function formatReviewNudge(result: DigestResult): string | undefined {
   if (!result.reviewDue || result.activeTotal === 0) return undefined;
+  const backlog = result.userActiveTotal > 0
+    ? `${userBacklogLabel(result)}未闭环${result.assistantBacklog > 0 ? `（另有 ${result.assistantBacklog} 条助手来源）` : ''}`
+    : `${result.assistantBacklog} 条助手来源待确认`;
   if (result.reviewPick) {
-    return `**本周回顾**：今天先带 1 条旧的；还有 ${result.activeTotal} 条未闭环，说“周回顾”看完整清单。`;
+    return `**本周回顾**：今天先带 1 条旧的；还有 ${backlog}，说“周回顾”看完整清单。`;
   }
-  return `**本周回顾**：本周还没看完整清单；还有 ${result.activeTotal} 条未闭环，说“周回顾”查看。`;
+  return `**本周回顾**：本周还没看完整清单；还有 ${backlog}，说“周回顾”查看。`;
 }
 
 function focusFallbackNote(result: DigestResult): string | undefined {
@@ -1369,10 +1597,70 @@ function formatActiveProjects(projects: ProjectSummary[]): string | undefined {
   return `最近活跃：${parts.join('、')}`;
 }
 
-function closingHint(result: DigestResult, total = result.closingTotal ?? 0): string {
-  return total > 0
-    ? `其中 ${total} 条展示过但未关闭，说“收尾”看清单。`
+function countOrigins(loops: LoopRecord[]): Record<LoopOrigin, number> {
+  const counts: Record<LoopOrigin, number> = { user: 0, assistant: 0, mixed: 0 };
+  for (const loop of loops) counts[loop.origin ?? 'mixed'] += 1;
+  return counts;
+}
+
+function closingHint(
+  result: DigestResult,
+  total = result.closingTotal ?? 0,
+  origins = result.closingOrigins,
+  scope: 'global' | 'project' = 'global',
+): string {
+  if (total <= 0) return '';
+  const completions = scope === 'project'
+    ? result.focusClosingCompletionTotal ?? result.closingCompletionTotal ?? 0
+    : result.closingCompletionTotal ?? 0;
+  const completionOrigins = scope === 'project'
+    ? result.focusClosingCompletionOrigins ?? result.closingCompletionOrigins
+    : result.closingCompletionOrigins;
+  const userCompletions = completionOrigins?.user ?? 0;
+  const completionNote = completions > 0
+    ? `，其中 ${completions} 条已有完成证据${userCompletions > 0 ? `（用户 ${userCompletions} 条，说“只看我的完成项”先确认）` : ''}`
     : '';
+  const completionEntry = completions > 0 ? '，说“只看完成证据”先确认这批' : '';
+  const breakdown = `用户 ${origins.user} / 助手 ${origins.assistant} / 混合 ${origins.mixed}${completionNote}`;
+  if (scope === 'project') {
+    const globalTotal = result.closingTotal ?? total;
+    const globalUserCompletions = result.closingCompletionOrigins?.user ?? 0;
+    const globalCompletionNote = globalTotal > total && globalUserCompletions > userCompletions
+      ? `（其中用户 ${globalUserCompletions} 条有完成证据）`
+      : '';
+    const tail = globalTotal > total
+      ? `说“收尾本项目”看这 ${total} 条，说“收尾”看全部 ${globalTotal} 条${globalCompletionNote}${completionEntry}。`
+      : `说“收尾本项目”看这 ${total} 条${completionEntry}。`;
+    return `本项目另有 ${total} 条展示过但未关闭（${breakdown}）；${tail}`;
+  }
+  return `其中 ${total} 条展示过但未关闭（${breakdown}），说“收尾”看清单${completionEntry}。`;
+}
+
+function closingNudge(result: DigestResult): string | undefined {
+  const focusTotal = result.mode === 'hot' && result.focusProject?.matched
+    ? (result.focusClosingTotal ?? 0)
+    : 0;
+  if (focusTotal > 0) {
+    const origins = result.focusClosingOrigins ?? result.closingOrigins;
+    const hint = closingHint(result, focusTotal, origins, 'project');
+    return origins.assistant > 0
+      ? `${hint} 想分开处理就说“只看助手建议”。`
+      : hint;
+  }
+  const total = result.closingTotal ?? 0;
+  if (total <= 0) return undefined;
+  const origins = result.closingOrigins;
+  const completions = result.closingCompletionTotal ?? 0;
+  const userCompletions = result.closingCompletionOrigins?.user ?? 0;
+  const completionNote = completions > 0
+    ? `，其中 ${completions} 条已有完成证据${userCompletions > 0 ? `（用户 ${userCompletions} 条，说“只看我的完成项”先确认）` : ''}`
+    : '';
+  const completionEntry = completions > 0 ? '，说“只看完成证据”先确认这批' : '';
+  const filter = origins.assistant > 0 ? '，想分开处理就说“只看助手建议”' : '';
+  const lead = result.mode === 'review' && result.reconcileCandidates.length > 0
+    ? '收尾清单共'
+    : '另有';
+  return `${lead} ${total} 条展示过但未关闭（用户 ${origins.user} / 助手 ${origins.assistant} / 混合 ${origins.mixed}${completionNote}）；说“收尾”看清单${completionEntry}${filter}。`;
 }
 
 export function formatRecap(result: DigestResult): string {
@@ -1409,7 +1697,7 @@ export function formatRecap(result: DigestResult): string {
     }
     lines.push(
       '',
-      `今天 ${result.dailySurfaceLimit} 条新回访已用完；这几条不占新预算。库存还有 ${result.activeTotal} 条未闭环。${closingHint(result)}要现在看就说“周回顾”。`,
+      `今天 ${result.dailySurfaceLimit} 条新回访已用完；这几条不占新预算。库存还有 ${userBacklogLabel(result)}未闭环${assistantBacklogNote(result.assistantBacklog)}。${closingHint(result)}要现在看就说“周回顾”。`,
     );
     return lines.join('\n');
   }
@@ -1439,7 +1727,7 @@ export function formatRecap(result: DigestResult): string {
       : `${Math.round(loop.confidence * 100)}%`;
     lines.push(
       '',
-      `${index + 1}. **${loop.title}** · ${label}${confirmedTag(result, loop)} · [ref ${loopRef(loop.id)}]`,
+      `${index + 1}. **${loop.title}** · ${label}${confirmedTag(result, loop)}${originTag(result, loop)} · [ref ${loopRef(loop.id)}]`,
       `  项目：${loop.projectName}`,
       `  下一步：${loop.nextAction}`,
       `  为什么现在提：${loop.why}`,
@@ -1458,7 +1746,7 @@ export function formatRecap(result: DigestResult): string {
   }
   lines.push(
     '',
-    `今天 ${result.dailySurfaceLimit} 条新回访已用完；这几条不占新预算。库存还有 ${result.activeTotal} 条未闭环。${closingHint(result)}要现在看就说“周回顾”。`,
+    `今天 ${result.dailySurfaceLimit} 条新回访已用完；这几条不占新预算。库存还有 ${userBacklogLabel(result)}未闭环${assistantBacklogNote(result.assistantBacklog)}。${closingHint(result)}要现在看就说“周回顾”。`,
     '',
     '哪条已经完成、哪条是你确实忘了、哪条是噪音？回编号或 ref 就行。',
     '回复示例：“1 忘了”“2 噪音”“3 已完成”；要细节就回编号。',
@@ -1546,7 +1834,7 @@ function formatSkillDigestBody(
       const ageDays = Math.floor((now.getTime() - Date.parse(loop.firstSeen)) / DAY_MS);
       const age = ageDays >= 1 ? ` · 已挂 ${ageDays} 天` : '';
       lines.push(
-        `${itemNumber}. **${loop.title}** · ${label}${age}${confirmedTag(result, loop)} · [ref ${loopRef(loop.id)}]`,
+        `${itemNumber}. **${loop.title}** · ${label}${age}${confirmedTag(result, loop)}${originTag(result, loop)} · [ref ${loopRef(loop.id)}]`,
         `  下一步：${loop.nextAction}`,
         `  为什么现在提：${loop.why}`,
       );
@@ -1562,6 +1850,8 @@ function formatSkillDigestBody(
   if (closeCandidates) lines.push('', closeCandidates);
   const active = formatActiveProjects(realActiveProjects(result, groupedDirs));
   if (active) lines.push('', active);
+  const closing = closingNudge(result);
+  if (closing) lines.push('', closing);
   const reviewNudge = formatReviewNudge(result);
   if (reviewNudge) lines.push('', reviewNudge);
   lines.push(

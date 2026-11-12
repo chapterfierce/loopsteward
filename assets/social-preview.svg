@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-label="LoopSteward 守环 — AI 不会忘，人会。">
+  <rect width="1280" height="640" fill="#0B1220"/>
+  <circle cx="1080" cy="90" r="300" fill="none" stroke="#1E293B" stroke-width="1"/>
+  <circle cx="1080" cy="90" r="220" fill="none" stroke="#1E293B" stroke-width="1"/>
+  <circle cx="1080" cy="90" r="140" fill="none" stroke="#1E293B" stroke-width="1"/>
+  <svg x="80" y="200" width="192" height="192" viewBox="0 0 128 128">
+    <defs>
+      <mask id="cutSocial">
+        <rect width="128" height="128" fill="#fff"/>
+        <path d="M42 26 C50 20 58 18 66 18" fill="none" stroke="#000" stroke-width="20" stroke-linecap="round"/>
+        <path d="M100 36 C105 44 107 52 108 62" fill="none" stroke="#000" stroke-width="20" stroke-linecap="round"/>
+      </mask>
+    </defs>
+    <path d="M64 20 C88 20 108 40 108 64 C108 88 88 108 64 108 C40 108 20 88 20 64 C20 40 40 20 64 20"
+          fill="none" stroke="#F8FAFC" stroke-width="14" mask="url(#cutSocial)"/>
+    <path d="M46 24 C62 18 80 22 94 34 C101 41 106 50 108 60"
+          fill="none" stroke="#10B981" stroke-width="14" stroke-linecap="round"/>
+  </svg>
+  <text x="380" y="250" font-family="'Microsoft YaHei', 'PingFang SC', sans-serif" font-size="64" font-weight="700" fill="#F8FAFC">AI 不会忘，人会。</text>
+  <text x="380" y="322" font-family="'Microsoft YaHei', 'PingFang SC', sans-serif" font-size="28" fill="#CBD5E1">守环替同时开很多 AI 会话的你，</text>
+  <text x="380" y="364" font-family="'Microsoft YaHei', 'PingFang SC', sans-serif" font-size="28" fill="#CBD5E1">看住那些还没做完、但已经想不起来的事。</text>
+  <text x="380" y="446" font-family="Inter, 'Segoe UI', Arial, sans-serif" font-size="21" fill="#94A3B8">本机存储 · 8 类 Agent · 每天最多 3 条 · 不打断心流</text>
+  <text x="380" y="506" font-family="Inter, 'Segoe UI', Arial, sans-serif" font-size="22" font-weight="600" fill="#10B981">LoopSteward · 守环</text>
+</svg>

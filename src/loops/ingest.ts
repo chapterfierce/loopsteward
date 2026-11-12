@@ -56,6 +56,18 @@ function signalId(session: RecentSession, messageId: string): string {
   return `${session.agent}:${session.sessionId}:${messageId}`;
 }
 
+const RECENT_QUESTION_HOLD_MS = 5 * 60 * 1000;
+
+function isRecentQuestion(session: RecentSession, now: Date): boolean {
+  const last = session.messages[session.messages.length - 1];
+  if (!last || last.role !== 'user') return false;
+  const text = last.text.trim();
+  if (!text.endsWith('?') && !text.endsWith('？')) return false;
+  const timestamp = Date.parse(last.timestamp ?? session.lastActive);
+  if (!Number.isFinite(timestamp)) return false;
+  return now.getTime() - timestamp < RECENT_QUESTION_HOLD_MS;
+}
+
 function emptySummary(): IngestSummary {
   return {
     sessionsSeen: 0,
@@ -70,6 +82,7 @@ function emptySummary(): IngestSummary {
 
 export async function ingestRecentSessions(options: IngestOptions = {}): Promise<IngestSummary> {
   const summary = emptySummary();
+  const now = options.now ?? new Date();
   const ownsStore = options.store === undefined;
   const store = options.store ?? new LoopStore(options.dbPath ?? resolveDefaultDbPath());
   const runId = store.startRun('session');
@@ -83,7 +96,7 @@ export async function ingestRecentSessions(options: IngestOptions = {}): Promise
       days: options.days ?? 7,
       settleMinutes: options.settleMinutes ?? 30,
       maxSessions: options.maxSessions ?? 120,
-      now: options.now,
+      now,
       codexRoot: options.codexRoot,
       claudeRoot: options.claudeRoot,
       claudeDesktopRoot: options.claudeDesktopRoot,
@@ -98,6 +111,10 @@ export async function ingestRecentSessions(options: IngestOptions = {}): Promise
     const processSession = async (session: RecentSession): Promise<void> => {
       try {
         if (session.messages.length === 0) return;
+        if ((options.settleMinutes ?? 30) === 0 && isRecentQuestion(session, now)) {
+          summary.sessionsSkipped += 1;
+          return;
+        }
         const identity = projectMap.resolve(session.projectDir);
         const projectName = displayProjectName(identity.name, session, options.home)
           || projectNameFromDir(identity.dir);

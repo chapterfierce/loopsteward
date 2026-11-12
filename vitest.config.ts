@@ -8,5 +8,6 @@ export default defineConfig({
     reporter: 'verbose',
     globals: true,
     testTimeout: 120000,
+    hookTimeout: 30000,
   },
 });

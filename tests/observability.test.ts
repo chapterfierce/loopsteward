@@ -23,9 +23,8 @@ import type { ServiceLogger } from '../src/observability/service-logger.js';
 
 // ─── Ports ──────────────────────────────────────────────────────────
 
-const SERVER_PORT = 3210;
-const MOCK_PORT = 3211;
-const BASE_URL = `http://127.0.0.1:${SERVER_PORT}`;
+let BASE_URL = '';
+let MOCK_PORT = 0;
 
 // ─── Prometheus Text Parsers ───────────────────────────────────────
 
@@ -87,7 +86,7 @@ async function pollHealth(): Promise<void> {
 }
 
 beforeAll(async () => {
-  process.env['PORT'] = String(SERVER_PORT);
+  process.env['PORT'] = '0';
   process.env['LOG_LEVEL'] = 'ERROR';
 
   // Load the logger singleton now that LOG_LEVEL is pinned (INFO/WARN
@@ -98,6 +97,14 @@ beforeAll(async () => {
   // Start the real app (src/index.ts listens at import time).
   const mod = await import('../src/index.js');
   server = mod.server as Server;
+  if (!server.listening) {
+    await new Promise<void>((resolve) => server!.once('listening', () => resolve()));
+  }
+  const address = server.address();
+  if (!address || typeof address === 'string') {
+    throw new Error('Server did not expose a TCP address');
+  }
+  BASE_URL = `http://127.0.0.1:${address.port}`;
 
   // Wait for the listener to accept traffic.
   await pollHealth();
@@ -114,7 +121,16 @@ beforeAll(async () => {
       res.end('{"ok":true}');
     });
   });
-  await new Promise<void>((resolve) => mockReceiver!.listen(MOCK_PORT, '127.0.0.1', resolve));
+  await new Promise<void>((resolve) => {
+    mockReceiver!.listen(0, '127.0.0.1', () => {
+      const mockAddress = mockReceiver!.address();
+      if (!mockAddress || typeof mockAddress === 'string') {
+        throw new Error('Mock receiver did not expose a TCP address');
+      }
+      MOCK_PORT = mockAddress.port;
+      resolve();
+    });
+  });
 });
 
 afterAll(async () => {

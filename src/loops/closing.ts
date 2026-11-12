@@ -1,16 +1,32 @@
 import path from 'node:path';
 import { LoopStore } from './loop-store.js';
 import { loopRef } from './loop-ref.js';
-import type { LoopStatus } from './types.js';
+import type { LoopOrigin, LoopStatus, ReconcileCacheCandidate } from './types.js';
 
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 20;
+const COMPLETION_CACHE_HOURS = 30 * 24;
+const COMPLETION_MIN_CONFIDENCE = 0.9;
+const COMPLETION_REASON_MAX = 160;
+
+const ORIGIN_LABELS: Record<LoopOrigin, string> = {
+  user: '用户来源',
+  assistant: '助手来源',
+  mixed: '混合来源',
+};
+
+const ORIGIN_ORDER: Record<LoopOrigin, number> = {
+  user: 0,
+  mixed: 1,
+  assistant: 2,
+};
 
 export interface ClosingItem {
   id: string;
   ref: string;
   title: string;
   status: LoopStatus;
+  origin?: LoopOrigin;
   confidence: number;
   projectName: string;
   projectDir: string;
@@ -20,12 +36,22 @@ export interface ClosingItem {
   firstPresentedAt: string;
   lastPresentedAt: string;
   nextAction: string;
+  why: string;
+  completion?: {
+    confidence: number;
+    reason: string;
+    checkedAt: string;
+  };
 }
 
 export interface ClosingReview {
   generatedAt: string;
   total: number;
   shown: number;
+  completionTotal: number;
+  completionOnly?: boolean;
+  origin?: LoopOrigin;
+  originTotals: Record<LoopOrigin, number>;
   items: ClosingItem[];
 }
 
@@ -34,6 +60,8 @@ export interface ClosingOptions {
   now?: Date;
   limit?: number;
   projectDir?: string;
+  origin?: LoopOrigin;
+  completionOnly?: boolean;
 }
 
 function clampLimit(value: number | undefined): number {
@@ -49,9 +77,25 @@ function projectKey(value: string): string {
   return normalized.replace(/\\/g, '/').toLowerCase();
 }
 
+function completionFor(
+  candidate: ReconcileCacheCandidate | undefined,
+): ClosingItem['completion'] | undefined {
+  if (!candidate || candidate.confidence < COMPLETION_MIN_CONFIDENCE) return undefined;
+  return {
+    confidence: candidate.confidence,
+    reason: candidate.reason,
+    checkedAt: candidate.checkedAt,
+  };
+}
+
 export function buildClosingReview(options: ClosingOptions): ClosingReview {
   const now = options.now ?? new Date();
   const stats = options.store.getPresentationStats(now.toISOString());
+  const completions = new Map(
+    options.store
+      .listRecentReconcileCandidates(now, COMPLETION_CACHE_HOURS, 500)
+      .map((candidate) => [candidate.loopId, candidate]),
+  );
   const project = options.projectDir ? projectKey(options.projectDir) : undefined;
   const items: ClosingItem[] = [];
 
@@ -65,6 +109,7 @@ export function buildClosingReview(options: ClosingOptions): ClosingReview {
       ref: loopRef(loop.id),
       title: loop.title,
       status: loop.status,
+      origin: loop.origin,
       confidence: loop.confidence,
       projectName: loop.projectName,
       projectDir: loop.projectDir,
@@ -74,21 +119,42 @@ export function buildClosingReview(options: ClosingOptions): ClosingReview {
       firstPresentedAt: presentation.firstPresentedAt,
       lastPresentedAt: presentation.lastPresentedAt,
       nextAction: loop.nextAction,
+      why: loop.why,
+      completion: completionFor(completions.get(loop.id)),
     });
   }
 
   items.sort((left, right) => (
-    right.presentationCount - left.presentationCount
+    Number(Boolean(right.completion)) - Number(Boolean(left.completion))
+    || ORIGIN_ORDER[left.origin ?? 'mixed'] - ORIGIN_ORDER[right.origin ?? 'mixed']
+    || right.presentationCount - left.presentationCount
     || left.lastPresentedAt.localeCompare(right.lastPresentedAt)
     || left.firstSeen.localeCompare(right.firstSeen)
   ));
 
+  const completionOnly = options.completionOnly === true;
+  const scoped = completionOnly
+    ? items.filter((item) => Boolean(item.completion))
+    : items;
+  const originTotals: Record<LoopOrigin, number> = { user: 0, assistant: 0, mixed: 0 };
+  for (const item of scoped) {
+    originTotals[item.origin ?? 'mixed'] += 1;
+  }
+
+  const selectedOrigin = options.origin;
+  const filtered = selectedOrigin
+    ? scoped.filter((item) => (item.origin ?? 'mixed') === selectedOrigin)
+    : scoped;
   const limit = clampLimit(options.limit);
   return {
     generatedAt: now.toISOString(),
-    total: items.length,
-    shown: Math.min(items.length, limit),
-    items: items.slice(0, limit),
+    total: filtered.length,
+    shown: Math.min(filtered.length, limit),
+    completionTotal: filtered.filter((item) => item.completion).length,
+    completionOnly: completionOnly || undefined,
+    origin: selectedOrigin,
+    originTotals,
+    items: filtered.slice(0, limit),
   };
 }
 
@@ -100,19 +166,63 @@ function shortDate(iso: string): string {
 
 export function formatClosingReview(review: ClosingReview): string {
   if (review.total === 0) {
+    if (review.completionOnly) {
+      return '没有带完成证据的已展示未关闭循环；说“收尾”看全部清单。';
+    }
+    if (review.origin) {
+      const others = (Object.keys(review.originTotals) as LoopOrigin[])
+        .filter((origin) => origin !== review.origin)
+        .reduce((sum, origin) => sum + review.originTotals[origin], 0);
+      return others > 0
+        ? `没有来源为「${ORIGIN_LABELS[review.origin]}」的已展示未关闭循环；其他来源还有 ${others} 条。`
+        : `没有来源为「${ORIGIN_LABELS[review.origin]}」的已展示未关闭循环。`;
+    }
     return '没有“已展示但未关闭”的循环。';
   }
+  const scope = [
+    review.completionOnly ? '只看完成证据' : '',
+    review.origin ? ORIGIN_LABELS[review.origin] : '',
+  ].filter(Boolean).map((part) => ` · ${part}`).join('');
+  const counts = `用户 ${review.originTotals.user} · 助手 ${review.originTotals.assistant} · 混合 ${review.originTotals.mixed}`;
+  const sourceLine = review.origin
+    ? `当前范围来源：${counts}；下面只列${ORIGIN_LABELS[review.origin]}。`
+    : `来源构成：${counts}。`;
   const lines = [
-    `# 收尾清单 · ${review.total} 条已展示未关闭`,
+    `# 收尾清单${scope} · ${review.total} 条已展示未关闭`,
     '这些条目已经给你看过，但还没关闭。逐条回：完成 / 稍后 / 不要了。',
+    sourceLine,
   ];
+  if (review.completionTotal > 0 && !review.completionOnly) {
+    lines.push(
+      `其中 ${review.completionTotal} 条已有完成证据，先列在前面；确认后回编号 + 完成，仍不会自动关闭。只想先看这批就说“只看完成证据”。`,
+    );
+  } else if (review.completionOnly) {
+    lines.push('这些条目都已有完成证据；确认后回编号 + 完成，仍不会自动关闭。这批都确认无误可回“全部完成”。');
+  }
   for (const [index, item] of review.items.entries()) {
     const confidence = Math.round(item.confidence * 100);
-    lines.push(
+    const origin = item.origin === 'assistant'
+      ? ' · 助手来源'
+      : item.origin === 'mixed'
+        ? ' · 混合来源'
+        : '';
+    const rows = [
       '',
-      `${index + 1}. **${item.title}** · ${item.projectName} · 展示 ${item.presentationCount} 次 · 最近 ${shortDate(item.lastPresentedAt)} · ${confidence}% · [ref ${item.ref}]`,
-      `   下一步：${item.nextAction}`,
-    );
+      `${index + 1}. **${item.title}** · ${item.projectName}${origin} · 展示 ${item.presentationCount} 次 · 最近 ${shortDate(item.lastPresentedAt)} · ${confidence}% · [ref ${item.ref}]`,
+    ];
+    if (item.completion) {
+      const normalized = item.completion.reason.replace(/\s+/g, ' ').trim();
+      const reason = normalized.length > COMPLETION_REASON_MAX
+        ? `${normalized.slice(0, COMPLETION_REASON_MAX - 3)}...`
+        : normalized;
+      rows.push(
+        `   可能已完成（${Math.round(item.completion.confidence * 100)}%）：${reason}`,
+        `   若证据不成立，再按原下一步：${item.nextAction}`,
+      );
+    } else {
+      rows.push(`   下一步：${item.nextAction}`);
+    }
+    lines.push(...rows);
   }
   if (review.total > review.shown) {
     lines.push('', `还有 ${review.total - review.shown} 条没列；处理完这批再说“继续收尾”。`);

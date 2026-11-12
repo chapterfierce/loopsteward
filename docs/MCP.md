@@ -58,23 +58,34 @@ node dist/src/mcp/server.js --db data/loops.db
 
 ### `loops_closing`
 
-列出已经被展示过、但一直没有关闭的循环，按展示次数从多到少排序，用作收尾清单。可按项目目录过滤。
+列出已经被展示过、但一直没有关闭的循环，用作收尾清单。30 天内 reconcile 置信度 ≥0.9 的条目先列；同一证据层内按 user → mixed → assistant 排序，再按展示次数从多到少。可按项目目录、来源或完成证据过滤。
 
 ```json
 {
   "projectDir": "C:\\repo",
+  "origin": "assistant",
   "limit": 10
 }
 ```
 
-`projectDir` 省略时包含所有项目；`limit` 默认 10，上限 20。返回 `projectDir`、`total`、`shown`、`items[]`，每条包含 `ref`、`title`、`projectName`、`presentationCount`、`lastPresentedAt`、`nextAction`、`why`。
+只看用户来源且已有完成证据：
+
+```json
+{
+  "projectDir": "C:\\repo",
+  "origin": "user",
+  "completionOnly": true
+}
+```
+
+`projectDir` 省略时包含所有项目；`origin` 可取 `user`、`assistant`、`mixed`，省略时不做来源过滤；`completionOnly` 为 true 时只返回有完成证据的条目（此时 `completionTotal` 等于 `total`）；`limit` 默认 10，上限 20。返回 `projectDir`、`origin`、`originTotals`、`total`、`shown`、`completionTotal`、`completionOnly`、`items[]`，每条包含 `ref`、`title`、`projectName`、`origin`、`presentationCount`、`lastPresentedAt`、`nextAction`、`why`，有完成证据时另带 `completion`（`confidence`、`reason`、`checkedAt`）。`originTotals` 是当前项目范围内的三类来源计数，在 `origin` 过滤前、`completionOnly` 过滤后统计，便于先判断清单构成。
 
 ## 只读保证
 
 - `loops_context` 调用 `buildDigest({ markSurfaced: false })`，不写 `last_surfaced_at`、presentation 或每日预算。
 - `loops_search` 只调用 `LoopStore.listLoops()`。
 - `loops_get` 只调用 `LoopStore.findLoopsByRef()` 和 `buildLoopDetail()`。
-- `loops_closing` 只调用 `LoopStore.listActiveLoops()` 和 `getPresentationStats()`，不写展示或状态。
+- `loops_closing` 只调用 `LoopStore.listActiveLoops()`、`getPresentationStats()` 和 `listRecentReconcileCandidates()`，不写展示或状态。
 - 服务器不注册 create / update / close / feedback 工具。
 - 工具清单中的每个工具都带 `annotations.readOnlyHint: true`。
 

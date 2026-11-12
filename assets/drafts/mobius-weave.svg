@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="Möbius woven ring">
+  <defs>
+    <mask id="cutWeave">
+      <rect width="128" height="128" fill="#fff"/>
+      <path d="M42 26 C50 20 58 18 66 18" fill="none" stroke="#000" stroke-width="20" stroke-linecap="round"/>
+      <path d="M100 36 C105 44 107 52 108 62" fill="none" stroke="#000" stroke-width="20" stroke-linecap="round"/>
+    </mask>
+  </defs>
+  <path d="M64 20 C88 20 108 40 108 64 C108 88 88 108 64 108 C40 108 20 88 20 64 C20 40 40 20 64 20"
+        fill="none" stroke="#0F172A" stroke-width="14" mask="url(#cutWeave)"/>
+  <path d="M46 24 C62 18 80 22 94 34 C101 41 106 50 108 60"
+        fill="none" stroke="#10B981" stroke-width="14" stroke-linecap="round"/>
+</svg>

@@ -43,5 +43,12 @@ describe('package entrypoints', () => {
     expect(pkg.files).toEqual(['dist', 'skills', 'scripts', 'docs/MCP.md', 'README.md']);
     expect(pkg.scripts.clean).toContain("rmSync('dist'");
     expect(pkg.scripts.prepack).toBe('npm run clean && npm run build:open-loops');
+    expect(pkg.scripts['verify:package']).toBe('node scripts/verify-package.mjs');
+  });
+
+  it('exposes one release gate that runs every pre-publish check', () => {
+    expect(pkg.scripts['release:check']).toBe(
+      'npm run check && npm test && npm run build && npm run verify:package && npm run test:legacy',
+    );
   });
 });
