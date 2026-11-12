@@ -68,7 +68,7 @@ const internalMaterial = [
   { regex: /^assets\/(drafts|concepts)\//i, message: 'design drafts must not be tracked in the public repo' },
   { regex: /\.tgz$/i, message: 'packed release artifacts must not be tracked' },
   { regex: /^(data|\.tmp|dist|node_modules)\//i, message: 'runtime or build output must not be tracked' },
-  { regex: /(^|\/)\.env(\.|$)/i, message: 'environment files must not be tracked' },
+  { regex: /(^|\/)\.env(?!\.example$)(\.|$)/i, message: 'environment files must not be tracked' },
   { regex: /\.(db|db-wal|db-shm|log)$/i, message: 'local data and logs must not be tracked' },
 ];
 
