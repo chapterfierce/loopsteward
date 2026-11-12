@@ -58,6 +58,18 @@ $env:LOOPSTEWARD_MODEL = "gpt-4o-mini"
 $env:LOOPSTEWARD_API_KEY = "<your key>"
 ```
 
+也可以写到 `~/.loopsteward/config.json`，避免每个 shell 重复设置：
+
+```json
+{
+  "baseUrl": "https://api.openai.com/v1",
+  "model": "gpt-4o-mini",
+  "apiKey": "<your key>"
+}
+```
+
+优先级是命令行参数 > 环境变量 > 配置文件；`LOOPSTEWARD_CONFIG` 可以指定别的配置文件路径。
+
 数据默认写入用户数据目录：
 
 - Windows：`%LOCALAPPDATA%\LoopSteward\loops.db`

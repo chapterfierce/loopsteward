@@ -8,20 +8,39 @@
 2. **资产分级**：运行时文件、公开文档、内部资料、密钥四类分开。内部资料不进公开仓库，密钥连历史都不进。
 3. **版本可信**：新包从 `0.1.0` 或 `1.0.0` 起步；此后只由 release-please 按 Conventional Commits 递增，同一天连续补发必须写清原因。
 
-## 1. 开发仓库与公开仓库分离
+## 1. 开发环境与打包环境分离
 
-开发仓库可以保留 `docs/HANDOFF.md`、调研、草稿图、测试数据、本机路径。公开仓库只接收通过白名单的文件。
+不是把开发目录复制一份改名，而是三层分开。
 
-首次公开建议用“孤儿提交”重建历史：
+### 1.1 配置分离
 
-```powershell
-git checkout --orphan public-main
-git rm -r --cached .
-# 按白名单重新 add，确认 git status 后再提交
-git commit -m "chore: initial public release"
-```
+- `.env.example` 入库，`.env.local` 忽略；真实密钥只留在本机，不进 Git。
+- 本地可以连自己的网关；公开包不写默认地址或模型，运行时只读 `LOOPSTEWARD_*` 环境变量或 `~/.loopsteward/config.json`。
+- 优先级固定为：命令行参数 > 环境变量 > 本地配置文件；`LOOPSTEWARD_CONFIG` 可以改配置文件路径。
+- 旧 `MAGPIE_*` 只作兼容别名，不作为公开文档的主配置。
 
-如果敏感内容已经进入公开历史，先轮换凭据，再用 `git filter-repo` 清理；只删当前文件不算清除。
+### 1.2 构建分离
+
+- 本地只开发与自测：`npm run check`、`npm test`、`npm run release:audit`。
+- 发布必须在 CI 的干净检出上执行 `npm ci && npm run build:open-loops`，从 tag 出包。
+- 不在本地脏工作区 `npm pack` 或 `npm publish`；同一版本不覆盖，修复发新的补丁版本。
+- 发布物是不可变 tarball，带 provenance；失败时回滚 tag 与 npm 版本，而不是重新打同一个包。
+
+### 1.3 仓库分离
+
+- 历史已经干净：一个公开仓即可，`main` 就是发布源。
+- 历史仍有内部资料：用“私有开发仓 + 公开发布仓”，或从私有仓按白名单导出。
+- 首次公开建议用孤儿提交重建历史；已经泄露的历史先轮换凭据，再用 `git filter-repo` 清理，只删当前文件不算清除。
+
+### 1.4 成熟节奏
+
+主干开发 + 短分支 + PR；CI 跑 lint、测试、构建；release-please 开版本 PR 并打 tag；CI 从 tag 干净构建、跑发布门禁、产出不可变 tarball；带 provenance 发布；临时目录安装并跑真实读写；失败可回滚。
+
+### 1.5 本项目落地
+
+- `claw-task-service` 继续作为开发仓；`data/`、`.env.local`、内部 docs 只在本地保留。
+- 公开仓只放运行时、公开文档和 skill；`docs/HANDOFF*`、调研、草稿图不进公开历史。
+- 本地配置写到 `~/.loopsteward/config.json` 或用户环境变量；公开包保持无默认。
 
 ## 2. 发布物白名单
 
@@ -39,7 +58,7 @@ npm 包只允许：
 
 ## 3. 九道发布门
 
-1. **干净检出**：从 `main` 新建 release 分支，`git status` 干净；不在本地脏树上打包。
+1. **干净检出**：发布从 tag 对应的干净检出开始，`git status` 干净；不在本地脏树上打包。
 2. **身份检查**：产品名、包名、CLI、技能名、仓库名、README 标题一致；旧名零命中。
 3. **隐私扫描**：本机绝对路径、内网地址、真实邮箱、私有项目名、API key、token、私钥零命中。
 4. **内部资料检查**：HANDOFF、调研、草稿、清理单、开发里程碑不进入公开树。
@@ -71,14 +90,16 @@ npm run release:audit -- --published <version>
 
 `--published` 会下载 registry 上的 tarball 再查一遍，用来确认“实际发出去的包”而不是本地目录。
 
-发布前顺序固定为：
+本地只做自测与审计，不产出发布物：
 
 ```powershell
-npm run clean
-npm run build:open-loops
+npm run check
+npm test
 npm run release:audit
 npm run release:check
 ```
+
+真正的发布由 CI 在 tag 上执行：`npm ci` → `npm run build:open-loops` → `release:audit` → `release:check` → `npm publish --provenance`。
 
 `release:audit` 有 error 时不得发布；只有 warning 时需要在发布记录里逐条写明接受理由。
 
