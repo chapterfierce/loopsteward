@@ -85,7 +85,7 @@ const privacyPatterns = [
   { regex: /\/Users\/(?!(?:you|me|dev|user|alice|bob|x|test|example|name|username|<))[^/\s"'`]+/, level: 'error', rule: 'privacy.local-path', message: 'absolute macOS user path; replace with a placeholder or relative path' },
   { regex: /\/home\/(?!(?:you|me|dev|user|alice|bob|x|test|example|name|username|<))[^/\s"'`]+/, level: 'error', rule: 'privacy.local-path', message: 'absolute Linux user path; replace with a placeholder or relative path' },
   { regex: /\b127\.0\.0\.1:3425\b/, level: 'error', rule: 'privacy.internal-endpoint', message: 'private gateway endpoint must not appear in public docs' },
-  { regex: /\bmarvis\/|deepseek-v4-1-flash/i, level: 'error', rule: 'privacy.internal-model', message: 'internal model route must not be a public default' },
+  { regex: /\bmarvis\/|deepseek-v4-1\-flash/i, level: 'error', rule: 'privacy.internal-model', message: 'internal model route must not be a public default' },
   { regex: /\bsk-(proj-|ant-)?[A-Za-z0-9_-]{20,}\b/, level: 'error', rule: 'secret.api-key', message: 'possible API key' },
   { regex: /\bgh[pousr]_[A-Za-z0-9]{30,}\b/, level: 'error', rule: 'secret.github-token', message: 'possible GitHub token' },
   { regex: /\bnpm_[A-Za-z0-9]{30,}\b/, level: 'error', rule: 'secret.npm-token', message: 'possible npm token' },
