@@ -89,7 +89,7 @@ async function startServer(): Promise<void> {
       : ['tsx', 'src/index.ts'];
 
     serverProc = spawn(cmd, args, {
-      cwd: 'C:\\Users\\46927\\Desktop\\project\\claw-task-service',
+      cwd: process.cwd(),
       env: { ...process.env, PORT: '3198', LOG_LEVEL: 'ERROR' },
       stdio: ['pipe', 'pipe', 'pipe'],
       shell: isWin ? false : true,
@@ -209,7 +209,7 @@ http.createServer((req, res) => {
 `];
 
     mockServerProc = spawn(cmd, args as string[], {
-      cwd: 'C:\\Users\\46927\\Desktop\\project\\claw-task-service',
+      cwd: process.cwd(),
       env: { ...process.env },
       stdio: ['pipe', 'pipe', 'pipe'],
       shell: false,

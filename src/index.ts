@@ -32,6 +32,7 @@ import { httpMetrics } from './observability/http-metrics.js';
 import { readinessHandler } from './observability/health-check.js';
 import { TaskManager } from './task-manager/task-manager.js';
 import { IntentTaskBridge } from './task-manager/intent-task-bridge.js';
+import { createTaskStore, type ExtendedQueryFilter } from './task-manager/task-persistence.js';
 import type { CreateTaskInput, ModifyTaskInput, TaskQueryFilter } from './task-manager/task-types.js';
 // M10: Import pipeline + metrics for intent API endpoints
 import { classifyIntent, getCacheStats, collectStats, type PipelineResult } from '../intent-engine/pipeline.js';
@@ -51,6 +52,18 @@ import { LifecycleLogger, type LifecycleEvent } from './task-manager/task-lifecy
 
 const PORT = parseInt(process.env['PORT'] ?? '3000', 10);
 const SERVICE_NAME = 'claw-task-service';
+
+// Storage selection:
+//   TASK_STORE=sqlite|memory  — explicit override
+//   default: sqlite in production (durable), memory otherwise (fast tests/dev)
+const configuredStore = process.env['TASK_STORE'];
+const STORE_TYPE: 'sqlite' | 'memory' =
+  configuredStore === 'sqlite' || configuredStore === 'memory'
+    ? configuredStore
+    : process.env['NODE_ENV'] === 'production'
+      ? 'sqlite'
+      : 'memory';
+const TASK_DB_PATH = process.env['TASK_DB_PATH'] ?? './data/tasks.db';
 
 // ─── App Setup ─────────────────────────────────────────────────────
 
@@ -252,7 +265,8 @@ lifecycleLogger.log = (event: LifecycleEvent): void => {
   domainMetrics.recordTaskTransition(event.from, event.to);
   logLifecycle(event);
 };
-const taskManager = new TaskManager(undefined, lifecycleLogger);
+const taskStore = createTaskStore(STORE_TYPE, TASK_DB_PATH);
+const taskManager = new TaskManager(taskStore, lifecycleLogger);
 
 // M10: Count task creation / archival (creation is not a lifecycle transition).
 const createTask = taskManager.createTask.bind(taskManager);
@@ -330,6 +344,46 @@ app.get('/api/tasks', (req, res) => {
   if (q['category']) filter.category = q['category'] as any;
   if (q['assignee']) filter.assignee = q['assignee'] as string;
   if (q['archived'] !== undefined) filter.archived = q['archived'] === 'true';
+
+  // Extended query (M7): pagination, sorting, time range, intent category.
+  const parseIntParam = (value: unknown): number | undefined => {
+    if (value === undefined) return undefined;
+    const parsed = parseInt(String(value), 10);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  };
+  const page = parseIntParam(q['page']);
+  const pageSize = parseIntParam(q['pageSize']);
+  const sortByRaw = q['sortBy'] as string | undefined;
+  const sortBy = sortByRaw === 'createdAt' || sortByRaw === 'updatedAt' ||
+    sortByRaw === 'priority' || sortByRaw === 'status'
+    ? sortByRaw
+    : undefined;
+  const sortOrderRaw = q['sortOrder'] as string | undefined;
+  const sortOrder = sortOrderRaw === 'asc' || sortOrderRaw === 'desc'
+    ? sortOrderRaw
+    : undefined;
+
+  const hasExtended =
+    page !== undefined || pageSize !== undefined || sortBy !== undefined ||
+    sortOrder !== undefined ||
+    q['createdAfter'] !== undefined || q['createdBefore'] !== undefined ||
+    q['updatedAfter'] !== undefined || q['updatedBefore'] !== undefined ||
+    q['intentCategory'] !== undefined;
+
+  if (hasExtended) {
+    const extended: ExtendedQueryFilter = { ...filter };
+    if (page !== undefined) extended.page = page;
+    if (pageSize !== undefined) extended.pageSize = pageSize;
+    if (sortBy !== undefined) extended.sortBy = sortBy;
+    if (sortOrder !== undefined) extended.sortOrder = sortOrder;
+    if (q['createdAfter']) extended.createdAfter = q['createdAfter'] as string;
+    if (q['createdBefore']) extended.createdBefore = q['createdBefore'] as string;
+    if (q['updatedAfter']) extended.updatedAfter = q['updatedAfter'] as string;
+    if (q['updatedBefore']) extended.updatedBefore = q['updatedBefore'] as string;
+    if (q['intentCategory']) extended.intentCategory = q['intentCategory'] as string;
+    res.json(taskManager.queryTasksExtended(extended));
+    return;
+  }
 
   const result = taskManager.queryTasks(filter);
   res.json(result);
@@ -509,6 +563,8 @@ const server = app.listen(PORT, () => {
   serviceLogger.info(`${SERVICE_NAME} started`, {
     port: PORT,
     logLevel: serviceLogger.getLevel(),
+    taskStore: STORE_TYPE,
+    taskDbPath: STORE_TYPE === 'sqlite' ? TASK_DB_PATH : undefined,
     endpoints: [
       'GET    /health',
       'GET    /ready',
@@ -531,6 +587,7 @@ const server = app.listen(PORT, () => {
 function shutdown(signal: string): void {
   serviceLogger.info('Shutting down', { signal });
   server.close(() => {
+    taskStore.close();
     serviceLogger.info('Server closed', { signal });
     process.exit(0);
   });
