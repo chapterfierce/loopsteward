@@ -13,7 +13,7 @@
 
 ## 一次性配置
 
-npm 包 `loopsteward` 绑定可信发布者：GitHub 仓库 `chapterfierce/loopsteward`、工作流文件 `release.yml`、允许 `npm publish`。绑定走 OIDC，仓库里不存 `NPM_TOKEN`。
+npm 包 `loopsteward` 需要绑定可信发布者：GitHub 仓库 `chapterfierce/loopsteward`、工作流文件 `release.yml`、允许 `npm publish`。绑定走 OIDC，仓库里不存 `NPM_TOKEN`。
 
 重新绑定或换仓库时：
 
@@ -65,4 +65,4 @@ npm logout --registry=https://registry.npmjs.org
 
 ## 已知阻塞
 
-- 无。
+- npm 侧可信发布者尚未绑定；需要一次浏览器 2FA 完成绑定。绑定后合并版本 PR 即自动发布。
