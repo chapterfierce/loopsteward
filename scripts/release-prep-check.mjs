@@ -301,7 +301,7 @@ function checkPublished(version) {
       if (entry.includes('intent-engine') || entry.includes('dist/src/index.')) {
         add('error', 'published.legacy', 'published tarball contains legacy build output', entry);
       }
-      if (/package\/(tests|data|\.tmp|docs\/(?!MCP\.md))/.test(entry)) {
+      if (/package\/(tests|data|\.tmp|docs\/(?!MCP\.md|RELEASE_PROCESS\.md))/.test(entry)) {
         add('error', 'published.internal', 'published tarball contains non-public material', entry);
       }
     }
