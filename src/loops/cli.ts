@@ -32,6 +32,7 @@ import {
   type PolicyAgent,
 } from './session-policy.js';
 import { installMcpConfigs, type McpClient } from './mcp-install.js';
+import { runRedact } from './redact-cli.js';
 import { formatSetup, runSetup } from './setup.js';
 import { buildCalibration, formatCalibration } from './calibrate.js';
 import { buildCoverageReport, formatCoverageReport } from './coverage.js';
@@ -71,6 +72,7 @@ function usage(): string {
     '  loopsteward update --id <loop_id> | --ref <code> | --refs <code,code> | --match <text> | --index <n> | --shown [--project <dir>] [--status open|pending|snoozed|resolved|dropped] [--note <text>] [--snooze-until <iso> | --snooze-hours <n>]',
     '  loopsteward feedback --id <loop_id> | --ref <code> | --refs <code,code> | --match <text> | --index <n> [--project <dir>] --verdict forgotten|noise [--note <text>] [--json]',
     '  loopsteward backup [--db <path>] [--out <path>] [--keep 30] [--json]',
+    '  loopsteward redact [--db <path>] [--apply] [--keep <n>] [--json]',
     '  loopsteward restore --backup <path> [--db <path>] [--dry-run] [--json]',
     '  loopsteward install-skill [--source <path>] [--target <path> | --agents codex,claude,qoder,workbuddy,hermes,antigravity | --all] [--json]',
     '  loopsteward install-policy [--agents codex,claude,zcode,dsh,antigravity,hermes] [--dry-run] [--uninstall] [--json]',
@@ -1084,6 +1086,7 @@ async function main(argv: string[]): Promise<number> {
   if (command === 'update') return runUpdate(flags);
   if (command === 'feedback') return runFeedback(flags);
   if (command === 'backup') return runBackup(flags);
+  if (command === 'redact') return runRedact(argv.slice(1));
   if (command === 'restore') return runRestore(flags);
   if (command === 'install-skill') return runInstallSkill(flags);
   if (command === 'install-policy') return runInstallPolicy(flags);

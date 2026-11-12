@@ -232,6 +232,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-refresh-task
 
 恢复用 `npm run loops:restore -- --backup <path> [--db data/loops.db] [--dry-run] [--json]`：先校验备份的 `integrity_check` 和 Open Loops 表结构，再给当前库做一份 `loops-before-restore-<时间>.db` 安全备份，最后用同目录临时文件原子替换。当前库损坏时会保留为 `*.corrupt-<时间>` 而不是静默覆盖；`--dry-run` 只报告目标、条数和计划中的安全备份路径，不改文件。恢复是单文件替换，不合并两份库。
 
+脱敏用 `npm run loops:redact -- [--db <path>] [--apply] [--keep <n>] [--json]`（全局安装后为 `loopsteward redact`）：新写入的会话文本在入库前会先去掉私钥块、URL 内嵌密码、Bearer、OpenAI/GitHub/Slack/AWS token、JWT，以及 `api_key` / `password` / `token` 这类赋值。存量库默认只预览命中条数；`--apply` 会先做一致性备份，再改写 signals、循环标题/下一步/原因和已关闭备注，`--keep` 控制备份保留数。
+
 默认窗口：热区 3 天、活跃 7 天；会话开始最多 3 条，周回顾 10–20 条；低置信度只进待确认。未闭环不会因为超过 30 天没有新证据而被丢掉：项目重新活跃时老循环会回到热区，周回顾不设时间门槛、也不受热区 24 小时冷却限制。热区和周回顾都优先没回访过、挂得更久的循环，避免高置信度条目或大项目长期占住名额；周回顾额外把真实项目排在会话工作区之前。
 
 ---
