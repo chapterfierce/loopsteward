@@ -51,6 +51,7 @@
     "loops:pending": "tsx src/loops/cli.ts pending",
     "loops:digest": "tsx src/loops/cli.ts digest",
     "loops:calibrate": "tsx src/loops/cli.ts calibrate",
+    "loops:closing": "tsx src/loops/cli.ts closing",
     "loops:reconcile": "tsx src/loops/cli.ts reconcile",
     "loops:stats": "tsx src/loops/cli.ts stats",
     "loops:doctor": "tsx src/loops/cli.ts doctor",
