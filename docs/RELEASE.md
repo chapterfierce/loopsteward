@@ -40,7 +40,17 @@ npx loopsteward --help
 - 发布 72 小时内：`npm unpublish loopsteward@2.9.1 --registry=https://registry.npmjs.org`
 - 超过 72 小时：`npm deprecate loopsteward@2.9.1 "原因" --registry=https://registry.npmjs.org`，再发补丁版本。
 
+## 发布记录
+
+### 2.9.1（2026-11-12）
+
+- npm 版本：`loopsteward@2.9.1`，`latest` 已指向该版本。
+- 标签：`v2.9.1`，指向 `c531029`。
+- GitHub release：https://github.com/chapterfierce/loopsteward/releases/tag/v2.9.1
+- 泄露 token `5928de`（`npm_L9mR…IqEG…`）已撤销；`npm token list` 为空。
+- 发布前 `npm run release:check` 通过：535/535 测试、旧套件 48/48、`verify:package` 正常。
+- 发布后在临时目录安装 `loopsteward@2.9.1` 并运行 `npx loopsteward --help`，入口正常。
+
 ## 已知阻塞
 
-- 泄露的 granular token 未撤销。
-- 工作树仍有未提交改动，远端 CI 未跑。
+- 无。
