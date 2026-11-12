@@ -1,0 +1,7 @@
+{"type":"session-meta","id":"wb-meta-1","sessionId":"wb-s1","timestamp":1794300000000,"meta":{"codebuddy.ai/hostKind":"unopted"}}
+{"type":"message","id":"wb-m1","sessionId":"wb-s1","role":"user","timestamp":1794300001000,"content":[{"type":"input_text","text":"<system-reminder data-role=\"user-context\">\n<user_info>\nWorkspace Folder: C:/work/delta\n</user_info>\n</system-reminder>\n继续做离线导出"}]}
+{"type":"file-history-snapshot","messageId":"wb-m1","cwd":"C:\\work\\delta","snapshot":{}}
+{"type":"ai-title","aiTitle":"WorkBuddy 离线导出","sessionId":"wb-s1","cwd":"C:\\work\\delta"}
+{"type":"message","id":"wb-m2","sessionId":"wb-s1","role":"assistant","timestamp":1794300002000,"content":[{"type":"output_text","text":"离线导出还差失败重试没做。"},{"type":"tool_call","text":"ignored"}]}
+{"type":"function_call","name":"read_file","arguments":"{}"}
+{"type":"message","id":"wb-m3","sessionId":"wb-s1","role":"assistant","timestamp":1794300003000,"status":"incomplete","providerData":{"skipRun":true,"error":{"code":429}},"content":[{"type":"output_text","text":"429 rate limited"}]}

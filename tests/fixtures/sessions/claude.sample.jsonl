@@ -1,0 +1,3 @@
+{"type":"user","uuid":"cl-m1","isSidechain":false,"cwd":"C:\\work\\beta","timestamp":"2026-11-09T10:00:00.000Z","message":{"role":"user","content":[{"type":"text","text":"<system-reminder>ignore this</system-reminder>继续做导出"}]}}
+{"type":"assistant","uuid":"cl-m2","isSidechain":false,"cwd":"C:\\work\\beta","timestamp":"2026-11-09T10:01:00.000Z","message":{"role":"assistant","content":[{"type":"text","text":"导出还差 CSV 编码没处理。"}]}}
+{"type":"assistant","uuid":"cl-m3","isSidechain":true,"cwd":"C:\\work\\beta","timestamp":"2026-11-09T10:02:00.000Z","message":{"role":"assistant","content":[{"type":"text","text":"sidechain must be ignored"}]}}

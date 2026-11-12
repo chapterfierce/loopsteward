@@ -1,0 +1,10 @@
+{
+  "on": true,
+  "model": "local-model",
+  "done": {
+    "claude/s1": "2026-11-10T07:42:50Z",
+    "qoder-cn/s3": "2026-11-10T07:26:34Z"
+  },
+  "last": "2026-11-10T15:04:00Z",
+  "dream": true
+}
