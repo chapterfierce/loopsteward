@@ -138,6 +138,14 @@ export interface ITaskStore {
 
   // ── Lifecycle ───────────────────────────────────────────────────
 
+  /** Optional persistent lifecycle audit trail (SQLiteStore implements it). */
+  getLifecycleEvents?(taskId: string): Array<{
+    fromStatus: TaskStatus;
+    toStatus: TaskStatus;
+    timestamp: string;
+    reason?: string;
+  }>;
+
   /** Clear all tasks. Used for testing. */
   clear(): void;
 

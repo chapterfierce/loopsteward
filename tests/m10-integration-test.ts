@@ -117,7 +117,7 @@ async function startServer(): Promise<void> {
       cmd,
       args,
       {
-        cwd: 'C:\\Users\\46927\\Desktop\\project\\claw-task-service',
+        cwd: process.cwd(),
         env: { ...process.env, PORT: '3199', LOG_LEVEL: 'ERROR' },
         stdio: ['pipe', 'pipe', 'pipe'],
         shell: isWin ? false : true,

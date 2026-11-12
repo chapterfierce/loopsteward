@@ -530,7 +530,7 @@ section('Part 9: HTTP API Integration (E2E)');
         : ['tsx', 'tests/m7-test-server.ts'];
 
       serverProc = spawn(cmd, args, {
-        cwd: 'C:\\Users\\46927\\Desktop\\project\\claw-task-service',
+        cwd: process.cwd(),
         env: { ...process.env, PORT: '3198', LOG_LEVEL: 'ERROR' },
         stdio: ['pipe', 'pipe', 'pipe'],
         shell: isWin ? false : true,

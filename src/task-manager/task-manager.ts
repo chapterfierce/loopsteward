@@ -153,7 +153,7 @@ export class TaskManager {
   // ── Modify ──────────────────────────────────────────────────────
 
   modifyTask(id: string, input: ModifyTaskInput): ManagerResult {
-    const task = this.store.get(id);
+    let task = this.store.get(id);
     if (!task) {
       return { ok: false, message: `任务不存在: ${id}` };
     }
@@ -161,6 +161,9 @@ export class TaskManager {
     if (input.status !== undefined && input.status !== task.status) {
       const statusResult = this.changeStatus(id, input.status);
       if (!statusResult.ok) return statusResult;
+      // changeStatus re-reads and updates the store; refresh this reference so
+      // the final update below cannot overwrite the new status with a stale one.
+      task = this.store.get(id) ?? task;
     }
     if (input.title !== undefined) task.title = input.title;
     if (input.description !== undefined) task.description = input.description;
@@ -232,6 +235,19 @@ export class TaskManager {
 
   /** Lifecycle audit events for a task. */
   getLifecycleEvents(id: string): LifecycleEvent[] {
+    // A persistent store holds the complete trail (including events from
+    // before a restart), so prefer it when available. InMemoryStore has no
+    // persistent trail and falls back to the live logger.
+    const persisted = this.store.getLifecycleEvents?.(id) ?? [];
+    if (persisted.length > 0) {
+      return persisted.map((event) => ({
+        taskId: id,
+        from: event.fromStatus,
+        to: event.toStatus,
+        timestamp: event.timestamp,
+        reason: event.reason,
+      }));
+    }
     return this.lifecycleLog.getEvents(id);
   }
 
@@ -239,7 +255,11 @@ export class TaskManager {
 
   private applyTransition(task: Task, to: TaskStatus, reason?: string): void {
     const from = task.status;
+    // Persist through the store first so SQLite can record the audit event
+    // atomically with the status change.
+    this.store.transitionStatus(task.id, to, reason);
     task.status = to;
+    task.updatedAt = new Date().toISOString();
     this.lifecycleLog.log({
       taskId: task.id,
       from,
