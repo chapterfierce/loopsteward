@@ -109,6 +109,24 @@ describe('buildClosingReview', () => {
     expect(review.items[0].id).toBe(beta.id);
   });
 
+  it('resolves a relative project filter against the current directory', () => {
+    const store = openStore();
+    const current = seed(store, 'Current', {
+      projectDir: process.cwd(),
+      projectName: 'current',
+    });
+    store.recordPresentation([current.id], '2026-11-10T11:00:00.000Z', 'hot', 'hot');
+
+    const review = buildClosingReview({
+      store,
+      now: new Date('2026-11-10T14:00:00.000Z'),
+      projectDir: '.',
+    });
+
+    expect(review.total).toBe(1);
+    expect(review.items[0].id).toBe(current.id);
+  });
+
   it('excludes never-presented, resolved, and snoozed loops', () => {
     const store = openStore();
     const presented = seed(store, 'A');
