@@ -85,6 +85,31 @@ describe('loop detail', () => {
     expect(formatLoopDetail(detail)).toContain('还有 1 条来源未展示');
   });
 
+  it('reports total presentation stats separately from the fatigue counter', () => {
+    const store = openStore();
+    const { loop } = store.saveLoop(
+      {
+        title: '展示统计',
+        nextAction: '继续',
+        why: '测试',
+        confidence: 0.8,
+        sourceSignalIds: ['sig_1'],
+      },
+      { projectDir: 'C:/work/alpha', projectName: 'alpha' },
+    );
+    store.recordPresentation([loop.id], '2026-11-10T11:00:00.000Z', 'hot', 'hot');
+    store.recordPresentation([loop.id], '2026-11-10T12:00:00.000Z', 'hot', 'recap');
+
+    const detail = buildLoopDetail(store, loop.id)!;
+    expect(detail.presentationStats).toMatchObject({
+      loopId: loop.id,
+      count: 2,
+      firstPresentedAt: '2026-11-10T11:00:00.000Z',
+      lastPresentedAt: '2026-11-10T12:00:00.000Z',
+    });
+    expect(formatLoopDetail(detail)).toContain('展示统计**: 共 2 次');
+  });
+
   it('returns undefined for an unknown loop id', () => {
     const store = openStore();
     expect(buildLoopDetail(store, 'loop_missing')).toBeUndefined();

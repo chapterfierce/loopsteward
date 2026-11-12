@@ -197,6 +197,8 @@ npm run loops:install-policy -- --uninstall --json
 
 `loops:closing` 是收尾清单：只列已经展示过、但仍 open/pending 的循环，按展示次数降序、最近展示时间升序，默认 10 条。它只读，不改状态、不写展示记录；用户回“完成 / 稍后 / 不要了”后，skill 按 ref 批量更新。没说的一律保持原状，展示次数多不等于已完成。零状态或每日额度用完时，摘要会补一句“其中 N 条展示过但未关闭，说‘收尾’看清单”。
 
+`show --json` 里 `presentationStats.count` 是总展示次数，和收尾清单同口径；`loop.presentationCount` 只是 recap/candidate/teaser 的连续重复疲劳计数，不能拿来判断被展示过几次。
+
 每条回访末尾都会显示一个稳定的短编号 `[ref xxxxxxxx]`；用户回“1 确实忘了 / 2 噪音”时，按那条的 ref 用 `feedback --ref <code>` 或 `update --ref <code>` 定位。ref 取自循环 id 的前 8 位十六进制，跨 digest、跨并行会话都不变；另一个会话重新跑 digest 不会把它指到别的条目。`--index` 仍保留，但它只指向最近一次展示记录，48 小时后过期，适合单会话内的快速回复；`--ref`、`--index`、`--id`、`--match` 互斥。
 
 用户说“今天先别提醒 / 晚点再说”时，优先用 `loops:update -- --refs <code1>,<code2> --status snoozed --snooze-hours 24` 暂停刚才看到的条目。同一批回访也可以批量记判断或批量关闭：`feedback -- --refs ... --verdict forgotten`、`update -- --refs ... --status resolved`；所有 `--refs` 命令都是全有或全无，任一 ref 不存在或有歧义就整批不写。批量“有用”只记反馈，不等于完成，不会关闭条目。默认暂停 24 小时，不写反馈、不算噪音，也不改变 `usefulRate`，到期后条目会重新参与回访。`--shown` 仍保留为兜底，但它只作用于最近一次 digest，并行会话下可能暂停到另一批。到期后的条目在读取层按 `open` 处理，统计和项目积压不会再把它们算作暂停中；数据库行会在下一次写入时顺带清理。

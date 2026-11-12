@@ -300,6 +300,7 @@ function getTool(store: LoopStore, args: Record<string, unknown>): CallToolResul
     missingSignalIds: detail.missingSignalIds,
     omittedSignalCount: detail.omittedSignalCount,
     latestFeedback: detail.latestFeedback ?? null,
+    presentationStats: detail.presentationStats ?? null,
   });
 }
 

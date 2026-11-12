@@ -2,7 +2,12 @@ import { LoopStore } from './loop-store.js';
 import { isNoiseSuppressed } from './feedback.js';
 import { loopRef } from './loop-ref.js';
 import { formatRelativeTime } from './projects.js';
-import type { LoopFeedbackRecord, LoopRecord, LoopSignal } from './types.js';
+import type {
+  LoopFeedbackRecord,
+  LoopPresentationStats,
+  LoopRecord,
+  LoopSignal,
+} from './types.js';
 
 export interface LoopDetail {
   ref: string;
@@ -11,6 +16,7 @@ export interface LoopDetail {
   missingSignalIds: string[];
   omittedSignalCount: number;
   latestFeedback?: LoopFeedbackRecord;
+  presentationStats?: LoopPresentationStats;
 }
 
 export function buildLoopDetail(
@@ -37,6 +43,7 @@ export function buildLoopDetail(
     missingSignalIds,
     omittedSignalCount: Math.max(0, loop.sourceSignalIds.length - queriedIds.length),
     latestFeedback: store.getLatestFeedbackForLoop(loop.id),
+    presentationStats: store.getPresentationStats().get(loop.id),
   };
 }
 
@@ -64,6 +71,14 @@ export function formatLoopDetail(detail: LoopDetail, now = new Date()): string {
   if (loop.snoozeUntil) lines.push(`- **暂缓到**: ${loop.snoozeUntil}`);
   if (loop.resolvedAt) lines.push(`- **关闭时间**: ${loop.resolvedAt}`);
   if (loop.resolutionNote) lines.push(`- **关闭说明**: ${loop.resolutionNote}`);
+  if (detail.presentationStats) {
+    const stats = detail.presentationStats;
+    lines.push(
+      `- **展示统计**: 共 ${stats.count} 次 · 首次 ${stats.firstPresentedAt} · 最近 ${stats.lastPresentedAt}`,
+    );
+  } else {
+    lines.push('- **展示统计**: 尚未进入回访');
+  }
   if (latestFeedback) {
     const label = latestFeedback.verdict === 'forgotten' ? '确实忘了' : '噪音';
     const suppressed = isNoiseSuppressed(loop, latestFeedback)

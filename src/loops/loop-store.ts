@@ -989,7 +989,7 @@ export class LoopStore {
     return rows.map((row: any) => this.rowToLoop(row));
   }
 
-  listActiveLoops(projectDir?: string): LoopRecord[] {
+  listActiveLoops(projectDir?: string, now: Date = new Date()): LoopRecord[] {
     const params: any[] = [];
     let where = "status IN ('open', 'pending', 'snoozed')";
     if (projectDir) {
@@ -1000,7 +1000,7 @@ export class LoopStore {
       SELECT * FROM loops WHERE ${where}
       ORDER BY last_seen DESC, confidence DESC
     `).all(...params);
-    return rows.map((row: any) => this.rowToLoop(row));
+    return rows.map((row: any) => this.rowToLoop(row, now));
   }
 
   listAllLoops(): LoopRecord[] {
@@ -1837,11 +1837,11 @@ export class LoopStore {
     };
   }
 
-  private rowToLoop(row: any): LoopRecord {
+  private rowToLoop(row: any, now: Date = new Date()): LoopRecord {
     const snoozeUntil = row.snooze_until ?? undefined;
     const snoozeExpired = row.status === 'snoozed'
       && snoozeUntil !== undefined
-      && Date.parse(snoozeUntil) <= Date.now();
+      && Date.parse(snoozeUntil) <= now.getTime();
     return {
       id: row.id,
       title: row.title,
