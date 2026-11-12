@@ -307,6 +307,8 @@ export interface DigestResult {
   reviewConfirmed: LoopRecord[];
   recapThrottled?: boolean;
   recapFocusEmpty?: boolean;
+  closingTotal?: number;
+  focusClosingTotal?: number;
   recapCooldownMinutes: number;
   total: number;
   activeTotal: number;
