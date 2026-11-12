@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.1.0](https://github.com/chapterfierce/loopsteward/compare/v3.0.0...v3.1.0) (2026-11-12)
+
+
+### Features
+
+* **config:** read local config file with no built-in defaults ([090095c](https://github.com/chapterfierce/loopsteward/commit/090095c8868c9abd376acb02c9aed2ad7c620639))
+
 ## [3.0.0](https://github.com/chapterfierce/loopsteward/compare/v2.9.2...v3.0.0) (2026-11-12)
 
 
