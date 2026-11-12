@@ -7,6 +7,23 @@ on:
     branches: [main, develop]
 
 jobs:
+  audit:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Audit dependencies
+        run: npm audit --registry=https://registry.npmjs.org --audit-level=moderate
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -63,9 +80,19 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run tests
+      - name: Run Open Loops tests
         run: npm test
-        continue-on-error: true
+
+      - name: Run legacy intent tests
+        run: npm run test:legacy
+
+      - name: Run milestone test suites
+        run: |
+          npm run test:m4
+          npm run test:m5
+          npm run test:m7
+          npm run test:m10
+          npm run test:m11
 
       - name: Upload test results
         if: always()
@@ -121,6 +148,34 @@ jobs:
         with:
           context: .
           push: false
+          load: true
           tags: claw-task-service:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Smoke test Docker image
+        run: docker run --rm claw-task-service:${{ github.sha }}
+
+  windows:
+    name: Windows
+    runs-on: windows-latest
+    needs: [lint, typecheck]
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Run Open Loops suite on Windows
+        run: npx vitest run

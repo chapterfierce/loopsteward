@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "./dist"
+  },
+  "include": [
+    "src/index.ts",
+    "src/magpie/**/*",
+    "src/loops/**/*",
+    "src/mcp/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "tests",
+    "src/quantization",
+    "**/*.test.ts",
+    "**/__tests__/**",
+    "**/*-test.ts"
+  ]
+}
