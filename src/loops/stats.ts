@@ -235,6 +235,15 @@ export function formatLoopStats(stats: LoopStats): string {
   const usefulRateInWindow = stats.feedback.usefulRateInWindow === null
     ? 'n/a'
     : `${Math.round(stats.feedback.usefulRateInWindow * 100)}%`;
+  const feedbackSample = stats.feedback.forgotten + stats.feedback.noise;
+  const feedbackWindowSample = stats.feedback.forgottenInWindow
+    + stats.feedback.noiseInWindow;
+  const feedbackSampleNote = feedbackSample < 20
+    ? `（样本不足 n=${feedbackSample}）`
+    : `（n=${feedbackSample}）`;
+  const feedbackWindowNote = feedbackWindowSample < 20
+    ? `（样本不足 n=${feedbackWindowSample}）`
+    : `（n=${feedbackWindowSample}）`;
   const lines = [
     '# 开放循环统计',
     '',
@@ -245,8 +254,8 @@ export function formatLoopStats(stats: LoopStats): string {
     `- 近 ${stats.windowDays} 天关闭 ${stats.resolution.resolvedInWindow} 条；首次展示 ${stats.surfacing.firstPresentedInWindow} 条，展示后关闭 ${stats.surfacing.resolvedAfterPresentationInWindow} 条`,
     `- 累计展示 ${stats.surfacing.presented} 条（成功标记回访 ${stats.surfacing.surfaced} 条），展示后关闭 ${stats.surfacing.resolvedAfterPresentation} 条；首次展示中位 ${firstPresentationMedian}`,
     `- 展示类型（按批次）：hot ${stats.surfacing.presentationsByKind.hot} 次 / recap ${stats.surfacing.presentationsByKind.recap} 次 / review ${stats.surfacing.presentationsByKind.review} 次 / teaser ${stats.surfacing.presentationsByKind.teaser} 次 / candidate ${stats.surfacing.presentationsByKind.candidate} 次`,
-    `- 历史反馈：确实忘了 ${stats.feedback.forgotten} 条 / 噪音 ${stats.feedback.noise} 条；有效率 ${usefulRate}`,
-    `- 近 ${stats.windowDays} 天反馈：确实忘了 ${stats.feedback.forgottenInWindow} 条 / 噪音 ${stats.feedback.noiseInWindow} 条；有效率 ${usefulRateInWindow}`,
+    `- 历史反馈：确实忘了 ${stats.feedback.forgotten} 条 / 噪音 ${stats.feedback.noise} 条；有效率 ${usefulRate}${feedbackSampleNote}`,
+    `- 近 ${stats.windowDays} 天反馈：确实忘了 ${stats.feedback.forgottenInWindow} 条 / 噪音 ${stats.feedback.noiseInWindow} 条；有效率 ${usefulRateInWindow}${feedbackWindowNote}`,
   ];
   if (stats.surfacing.futurePresentations > 0) {
     lines.push(
