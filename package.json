@@ -1,13 +1,70 @@
 {
-  "name": "claw-task-service",
-  "version": "2.5.0",
-  "description": "Claw Task Service with Phase 2.5 Intent Engine",
+  "name": "loopsteward",
+  "version": "2.9.0",
+  "description": "Open Loops tracker for parallel AI sessions",
   "type": "module",
-  "main": "dist/index.js",
+  "license": "MIT",
+  "keywords": [
+    "open-loops",
+    "ai-agents",
+    "codex",
+    "claude-code",
+    "task-tracker",
+    "local-first"
+  ],
+  "main": "dist/src/loops/cli.js",
+  "bin": {
+    "loopsteward": "dist/src/loops/cli.js"
+  },
+  "files": [
+    "dist",
+    "skills",
+    "scripts",
+    "docs/MCP.md",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.15.0"
+  },
   "scripts": {
-    "dev": "tsx src/index.ts",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "dev": "tsx src/loops/cli.ts",
+    "legacy:dev": "tsx src/index.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "build:open-loops": "tsc -p tsconfig.open-loops.json",
+    "prepack": "npm run clean && npm run build:open-loops",
+    "start": "node dist/src/loops/cli.js",
+    "legacy:start": "node dist/src/index.js",
     "check": "tsc --noEmit",
-    "test": "tsx intent-engine/test.ts",
+    "magpie:scan": "tsx src/magpie/scan.ts",
+    "loops:ingest": "tsx src/loops/cli.ts ingest",
+    "loops:sessions": "tsx src/loops/cli.ts sessions",
+    "loops:list": "tsx src/loops/cli.ts list",
+    "loops:pending": "tsx src/loops/cli.ts pending",
+    "loops:digest": "tsx src/loops/cli.ts digest",
+    "loops:calibrate": "tsx src/loops/cli.ts calibrate",
+    "loops:reconcile": "tsx src/loops/cli.ts reconcile",
+    "loops:stats": "tsx src/loops/cli.ts stats",
+    "loops:doctor": "tsx src/loops/cli.ts doctor",
+    "loops:presentations": "tsx src/loops/cli.ts presentations",
+    "loops:projects": "tsx src/loops/cli.ts projects",
+    "loops:coverage": "tsx src/loops/cli.ts coverage",
+    "loops:audit": "tsx src/loops/cli.ts audit",
+    "loops:show": "tsx src/loops/cli.ts show",
+    "loops:update": "tsx src/loops/cli.ts update",
+    "loops:feedback": "tsx src/loops/cli.ts feedback",
+    "loops:backup": "tsx src/loops/cli.ts backup",
+    "loops:redact": "tsx src/loops/redact-cli.ts",
+    "loops:restore": "tsx src/loops/cli.ts restore",
+    "loops:install-skill": "tsx src/loops/cli.ts install-skill",
+    "loops:install-policy": "tsx src/loops/cli.ts install-policy",
+    "loops:install-mcp": "tsx src/loops/cli.ts install-mcp",
+    "mcp": "node dist/src/mcp/server.js",
+    "loops:setup": "tsx src/loops/cli.ts setup",
+    "test": "vitest run",
+    "test:legacy": "tsx intent-engine/test.ts",
+    "test:vitest": "vitest run",
+    "test:smoke": "npm run build && node tests/persistence-smoke.mjs",
     "test:m4": "tsx tests/m4-integration-test.ts",
     "test:m5": "tsx intent-engine/lang-detector-test.ts",
     "test:m7": "tsx tests/m7-persistence-test.ts",
@@ -17,15 +74,20 @@
     "test:m11": "tsx tests/m11-circuit-breaker-test.ts",
     "bench:m9": "tsx src/benchmark/benchmark.ts"
   },
-  "dependencies": {
-    "express": "^4.18.2",
-    "zod": "^3.22.4"
-  },
   "devDependencies": {
     "@types/express": "^4.17.21",
     "@types/node": "^20.11.0",
+    "express": "^4.22.3",
     "tsx": "^4.7.0",
     "typescript": "^5.3.3",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.12"
+  },
+  "overrides": {
+    "body-parser": "^1.20.9",
+    "proxy-addr": "^2.0.8",
+    "qs": "^6.17.1"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2"
   }
 }

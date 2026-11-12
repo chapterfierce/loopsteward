@@ -1,4 +1,18 @@
 node_modules/
 dist/
+.tmp/
 *.js.map
 .DS_Store
+.env
+.env.*
+data/
+*.db
+*.db-wal
+*.db-shm
+*.tgz
+
+# Local working notes: personal paths, handoff log, competitive research
+docs/HANDOFF.md
+docs/market-landscape-*.md
+docs/requirements-retrospective-*.md
+docs/superpowers/
