@@ -15,8 +15,7 @@ import {
   policyTargets,
   type PolicyAgent,
 } from './session-policy.js';
-
-const DEFAULT_SETUP_AGENTS: SkillAgent[] = ['hermes'];
+import { detectPolicyAgents, detectSkillAgents } from './agent-detect.js';
 
 export interface SetupOptions {
   repoRoot?: string;
@@ -132,7 +131,8 @@ export async function runSetup(options: SetupOptions = {}): Promise<SetupResult>
     }
   }
 
-  const requestedAgents = options.agents ?? DEFAULT_SETUP_AGENTS;
+  const requestedAgents = options.agents
+    ?? detectSkillAgents({ homeDir: home, localAppData });
   const skillTargets = skillAgentTargets({ homeDir: home, localAppData })
     .filter((target) => fs.existsSync(target.root));
   const requestedSkillAgents = requestedAgents.filter(
@@ -144,12 +144,11 @@ export async function runSetup(options: SetupOptions = {}): Promise<SetupResult>
   if (selectedSkills.length === 0) {
     steps.push(
       requestedAgents.length > 0
-        ? {
-            key: 'skill',
-            status: 'failed',
-            detail: `未检测到可安装 skill 的 Agent：${requestedAgents.join(', ')}；先启动一次对应 Agent，确认目录存在后重试`,
-          }
-        : skipped('skill', '未选择 Agent'),
+        ? skipped(
+            'skill',
+            `未检测到可安装 skill 的 Agent：${requestedAgents.join(', ')}；先启动一次对应 Agent，或用 --agents 指定`,
+          )
+        : skipped('skill', '未检测到已安装的 Agent，跳过 skill 安装'),
     );
   } else if (dryRun) {
     steps.push({
@@ -178,8 +177,10 @@ export async function runSetup(options: SetupOptions = {}): Promise<SetupResult>
   }
 
   const policyTargetsAll = policyTargets({ homeDir: home, localAppData });
-  const requestedPolicyAgents = requestedAgents
-    .filter((agent) => policyTargetsAll.some((target) => target.agent === agent)) as PolicyAgent[];
+  const requestedPolicyAgents = options.agents === undefined
+    ? detectPolicyAgents({ homeDir: home, localAppData })
+    : requestedAgents
+      .filter((agent) => policyTargetsAll.some((target) => target.agent === agent)) as PolicyAgent[];
   const policyCandidates = policyTargetsAll.filter(
     (target) =>
       requestedPolicyAgents.includes(target.agent)
@@ -188,12 +189,11 @@ export async function runSetup(options: SetupOptions = {}): Promise<SetupResult>
   if (policyCandidates.length === 0) {
     steps.push(
       requestedAgents.length > 0
-        ? {
-            key: 'policy',
-            status: 'failed',
-            detail: `未检测到可写入的 Agent 入口文件：${requestedAgents.join(', ')}；先启动一次对应 Agent，确认目录存在后重试`,
-          }
-        : skipped('policy', '未选择 Agent'),
+        ? skipped(
+            'policy',
+            `未检测到可写入的 Agent 入口文件：${requestedAgents.join(', ')}；先启动一次对应 Agent，或用 --agents 指定`,
+          )
+        : skipped('policy', '未检测到已安装的 Agent，跳过会话入口规则'),
     );
   } else if (dryRun) {
     steps.push({
@@ -207,7 +207,7 @@ export async function runSetup(options: SetupOptions = {}): Promise<SetupResult>
         homeDir: home,
         localAppData,
         agents: requestedPolicyAgents,
-        scriptPath: path.join(root, 'scripts', 'open-loops.ps1'),
+        scriptPath: path.join(root, 'scripts', 'open-loops.mjs'),
         now,
       });
       steps.push({

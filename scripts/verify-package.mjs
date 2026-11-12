@@ -128,6 +128,37 @@ try {
     fs.readFileSync(path.join(installedRoot, 'package.json'), 'utf8'),
   );
   assert(installedManifest.version === expectedVersion, 'installed package version mismatch');
+  assert(
+    installedManifest.main === 'dist/src/loops/index.js',
+    `unexpected package main: ${installedManifest.main}`,
+  );
+  assert(
+    installedManifest.exports?.['.'] === './dist/src/loops/index.js',
+    'package exports do not point at the public entry',
+  );
+  assert(
+    installedManifest.bin?.['loopsteward-mcp'],
+    'package is missing the loopsteward-mcp bin',
+  );
+
+  const importScript = path.join(tempDir, 'verify-import.mjs');
+  fs.writeFileSync(
+    importScript,
+    [
+      "import * as api from 'loopsteward';",
+      "console.log(JSON.stringify({",
+      "  hasIngest: typeof api.ingestRecentSessions === 'function',",
+      "  hasStore: typeof api.LoopStore === 'function',",
+      '}));',
+      '',
+    ].join('\n'),
+    'utf8',
+  );
+  const importOutput = run(process.execPath, [importScript], tempDir);
+  assert(!/LoopSteward \(守环\)|Usage:/.test(importOutput), 'importing the package printed CLI usage');
+  const imported = JSON.parse(importOutput);
+  assert(imported.hasIngest, 'package entry does not export ingestRecentSessions');
+  assert(imported.hasStore, 'package entry does not export LoopStore');
 
   const { LoopStore } = await import(
     pathToFileURL(path.join(installedRoot, 'dist', 'src', 'loops', 'loop-store.js')).href
@@ -158,6 +189,106 @@ try {
   }
 
   const cliPath = path.join(installedRoot, 'dist', 'src', 'loops', 'cli.js');
+
+  const emptyHome = path.join(tempDir, 'empty-home');
+  fs.mkdirSync(emptyHome, { recursive: true });
+  const setup = JSON.parse(run(
+    process.execPath,
+    [
+      cliPath,
+      'setup',
+      '--dry-run',
+      '--json',
+      '--home', emptyHome,
+      '--local-appdata', path.join(emptyHome, 'AppData', 'Local'),
+    ],
+    tempDir,
+  ));
+  assert(setup.ok === true, `setup dry-run failed on an empty home: ${JSON.stringify(setup.steps)}`);
+  assert(
+    setup.steps.find((step) => step.key === 'skill')?.status === 'skipped',
+    'setup should skip skill installation when no agent is detected',
+  );
+  assert(!fs.existsSync(path.join(emptyHome, '.codex')), 'setup created a dead agent directory');
+
+  const agentHome = path.join(tempDir, 'agent-home');
+  fs.mkdirSync(path.join(agentHome, '.codex'), { recursive: true });
+  const skillInstall = JSON.parse(run(
+    process.execPath,
+    [
+      cliPath,
+      'install-skill',
+      '--agents', 'codex',
+      '--home', agentHome,
+      '--json',
+    ],
+    tempDir,
+  ));
+  assert(
+    skillInstall.results?.[0]?.action === 'installed',
+    'install-skill did not install the Codex copy',
+  );
+  const installedSkill = fs.readFileSync(
+    path.join(agentHome, '.codex', 'skills', 'open-loops', 'SKILL.md'),
+    'utf8',
+  );
+  assert(!installedSkill.includes('C:\\loopsteward'), 'installed skill still contains the old hard-coded path');
+  assert(
+    installedSkill.includes(path.join(installedRoot, 'scripts', 'open-loops.mjs')),
+    'installed skill does not point at the cross-platform wrapper',
+  );
+  assert(
+    fs.existsSync(path.join(installedRoot, 'scripts', 'open-loops.mjs')),
+    'packaged wrapper script is missing',
+  );
+
+  const ingestDbPath = path.join(tempDir, 'ingest.db');
+  const ingestProject = path.join(tempDir, 'ingest-project');
+  fs.mkdirSync(ingestProject, { recursive: true });
+  const packagedApi = await import(
+    pathToFileURL(path.join(installedRoot, 'dist', 'src', 'loops', 'index.js')).href
+  );
+  const ingestSummary = await packagedApi.ingestRecentSessions({
+    dbPath: ingestDbPath,
+    discover: () => [{
+      agent: 'codex',
+      sessionId: 'package-verify',
+      title: 'package verify',
+      projectDir: ingestProject,
+      lastActive: '2026-11-10T10:01:00.000Z',
+      sourceFile: 'package-verify.jsonl',
+      messages: [
+        {
+          id: 'm1',
+          role: 'user',
+          text: '下一步补错误提示',
+          timestamp: '2026-11-10T10:00:00.000Z',
+        },
+        {
+          id: 'm2',
+          role: 'assistant',
+          text: '我接下来补错误提示。',
+          timestamp: '2026-11-10T10:01:00.000Z',
+        },
+      ],
+    }],
+    extract: async () => [{
+      title: '补错误提示',
+      nextAction: '补错误提示',
+      why: '还没补',
+      confidence: 0.9,
+      sourceMessageIds: ['m1', 'm2'],
+    }],
+  });
+  assert(ingestSummary.errors.length === 0, `packaged ingest errors: ${ingestSummary.errors.join('; ')}`);
+  assert(ingestSummary.loopsCreated === 1, `packaged ingest created ${ingestSummary.loopsCreated} loops`);
+  const ingestStore = new LoopStore(ingestDbPath);
+  try {
+    assert(ingestStore.listLoops({ status: 'open' }).length === 1, 'packaged ingest did not persist the loop');
+  } finally {
+    ingestStore.close();
+  }
+
   const closing = JSON.parse(
     run(
       process.execPath,

@@ -528,4 +528,49 @@ describe('ingestRecentSessions', () => {
     expect(later.sessionsProcessed).toBe(1);
     expect(extractCalls).toBe(1);
   });
+
+  it('redacts secrets before sending session messages to the model', async () => {
+    const store = new LoopStore(':memory:');
+    stores.push(store);
+    const session = makeSession();
+    const fakeApiKey = ['sk', 'verify', 'redaction', '0000000000'].join('-');
+    const fakePassword = ['verify', 'password', '000000'].join('-');
+    session.messages = [
+      {
+        id: 'm1',
+        role: 'user',
+        text: `配置 api_key=${fakeApiKey}，password=${fakePassword}，下一步补错误提示`,
+        timestamp: '2026-11-10T10:00:00.000Z',
+      },
+      {
+        id: 'm2',
+        role: 'assistant',
+        text: '收到，下一步补错误提示。',
+        timestamp: '2026-11-10T10:01:00.000Z',
+      },
+    ];
+    let sentText = '';
+    const extract = async (input: any) => {
+      sentText = input.messages.map((message: any) => message.text).join('\n');
+      return [{
+        title: '补错误提示',
+        nextAction: '补错误提示',
+        why: '还没补',
+        confidence: 0.8,
+        sourceMessageIds: ['m2'],
+      }];
+    };
+
+    const summary = await ingestRecentSessions({
+      discover: () => [session],
+      extract,
+      store,
+    });
+
+    expect(summary.errors).toEqual([]);
+    expect(sentText).not.toContain(fakeApiKey);
+    expect(sentText).not.toContain(fakePassword);
+    expect(sentText).toContain('[REDACTED]');
+    expect(sentText).toContain('下一步补错误提示');
+  });
 });

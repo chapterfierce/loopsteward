@@ -18,7 +18,7 @@ describe('loadProjectMap', () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'loops-map-'));
     tempDirs.push(home);
     const parent = path.join(home, 'project');
-    const child = path.join(parent, 'example-project');
+    const child = path.join(parent, 'sample-app');
     fs.writeFileSync(path.join(home, 'memory.json'), JSON.stringify({
       version: 1,
       memories: [],
@@ -51,11 +51,11 @@ describe('loadProjectMap', () => {
     });
     expect(map.resolve(child)).toEqual({
       dir: path.normalize(child),
-      name: 'example-project',
+      name: 'sample-app',
     });
-    expect(map.resolve('C:\\work\\example-project\\.claude\\worktrees\\great-tesla')).toEqual({
-      dir: path.normalize('C:\\work\\example-project'),
-      name: 'example-project',
+    expect(map.resolve('C:\\work\\sample-app\\.claude\\worktrees\\great-tesla')).toEqual({
+      dir: path.normalize('C:\\work\\sample-app'),
+      name: 'sample-app',
     });
   });
 });

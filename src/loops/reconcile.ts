@@ -1,8 +1,6 @@
 import { createHash } from 'node:crypto';
 import { LoopStore } from './loop-store.js';
 import {
-  DEFAULT_BASE_URL,
-  DEFAULT_MODEL,
   extractResolutions,
   LoopExtractionError,
   type ChatFn,
@@ -11,6 +9,8 @@ import {
 import { loadProjectMap } from './project-map.js';
 import { resolveDefaultDbPath } from './data-path.js';
 import { loopRef } from './loop-ref.js';
+import { resolveLlmConfig } from './llm-config.js';
+import { redactSecrets } from './redact.js';
 import {
   discoverRecentSessions,
   displayProjectName,
@@ -436,8 +436,9 @@ export async function reconcileRecentSessions(
   const resolve = options.resolve ?? extractResolutions;
   const projectMap = loadProjectMap(options.magpieHome);
   const minConfidence = options.minConfidence ?? 0.9;
-  const model = options.model ?? process.env.MAGPIE_MODEL ?? DEFAULT_MODEL;
-  const baseUrl = options.baseUrl ?? process.env.MAGPIE_BASE_URL ?? DEFAULT_BASE_URL;
+  const llm = resolveLlmConfig({ baseUrl: options.baseUrl, model: options.model });
+  const model = llm.model;
+  const baseUrl = llm.baseUrl;
 
   const callResolve = (
     session: RecentSession,
@@ -445,33 +446,39 @@ export async function reconcileRecentSessions(
     loops: LoopRecord[],
     messages: SessionMessage[],
     maxMessages: number,
-  ): Promise<ResolvedLoop[]> => resolve(
-    {
-      session: {
-        agent: session.agent,
-        sessionId: session.sessionId,
-        title: session.title,
-        projectDir,
+  ): Promise<ResolvedLoop[]> => {
+    const safeMessages = messages.map((message) => ({
+      ...message,
+      text: redactSecrets(message.text),
+    }));
+    return resolve(
+      {
+        session: {
+          agent: session.agent,
+          sessionId: session.sessionId,
+          title: session.title,
+          projectDir,
+        },
+        loops: loops.map((loop) => ({
+          id: loop.id,
+          title: loop.title,
+          nextAction: loop.nextAction,
+          status: loop.status,
+          confidence: loop.confidence,
+          lastSeen: loop.lastSeen,
+        })),
+        messages: safeMessages,
+        maxMessages,
       },
-      loops: loops.map((loop) => ({
-        id: loop.id,
-        title: loop.title,
-        nextAction: loop.nextAction,
-        status: loop.status,
-        confidence: loop.confidence,
-        lastSeen: loop.lastSeen,
-      })),
-      messages,
-      maxMessages,
-    },
-    {
-      chat: options.chat,
-      model,
-      baseUrl,
-      minConfidence,
-      tolerateUnknownEvidence: true,
-    },
-  );
+      {
+        chat: options.chat,
+        model,
+        baseUrl,
+        minConfidence,
+        tolerateUnknownEvidence: true,
+      },
+    );
+  };
 
   const resolveWithSplit = async (
     session: RecentSession,
@@ -611,8 +618,8 @@ export async function reconcileRecentSessions(
           projectDir: job.identity.dir,
           projectName: job.identity.name,
           loops: job.loops,
-          model,
-          baseUrl,
+          model: model ?? '',
+          baseUrl: baseUrl ?? '',
           minConfidence,
           secondLook: options.secondLook !== false,
         });

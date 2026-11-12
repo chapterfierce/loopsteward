@@ -2,6 +2,7 @@
   "name": "loopsteward",
   "version": "2.9.2",
   "description": "Open Loops tracker for parallel AI sessions",
+  "author": "LoopSteward contributors",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -20,15 +21,21 @@
     "task-tracker",
     "local-first"
   ],
-  "main": "dist/src/loops/cli.js",
+  "main": "dist/src/loops/index.js",
+  "exports": {
+    ".": "./dist/src/loops/index.js",
+    "./package.json": "./package.json"
+  },
   "bin": {
-    "loopsteward": "dist/src/loops/cli.js"
+    "loopsteward": "dist/src/loops/cli.js",
+    "loopsteward-mcp": "dist/src/mcp/server.js"
   },
   "files": [
     "dist",
     "skills",
     "scripts",
     "docs/MCP.md",
+    "docs/RELEASE_PROCESS.md",
     "README.md"
   ],
   "engines": {
@@ -42,6 +49,7 @@
     "build:open-loops": "tsc -p tsconfig.open-loops.json",
     "prepack": "npm run clean && npm run build:open-loops",
     "verify:package": "node scripts/verify-package.mjs",
+    "release:audit": "node scripts/release-prep-check.mjs",
     "release:check": "npm run check && npm test && npm run build && npm run verify:package && npm run test:legacy",
     "start": "node dist/src/loops/cli.js",
     "legacy:start": "node dist/src/index.js",

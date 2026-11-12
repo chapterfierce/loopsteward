@@ -190,10 +190,10 @@ describe('buildLoopAudit', () => {
 
     store.saveSignal(makeSignal(
       'codex:s1:digest',
-      '# 今天提过 · 3 条\n\n1. **example-project 冷启动**\n\n回编号或 ref 看下一步和依据。',
+      '# 今天提过 · 3 条\n\n1. **sample-app 冷启动**\n\n回编号或 ref 看下一步和依据。',
       'assistant',
     ));
-    const artifact = seedLoop(store, 'example-project 冷启动重复项', ['codex:s1:digest']);
+    const artifact = seedLoop(store, 'sample-app 冷启动重复项', ['codex:s1:digest']);
 
     store.saveSignal(makeSignal(
       'codex:s1:real',

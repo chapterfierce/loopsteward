@@ -6,7 +6,7 @@ describe('isTrackerOutputMessage', () => {
     for (const text of [
       '# 今天提过 · 3 条\n\n1. **回访配额**',
       '# 本周回顾 · 1 条\n\n1. **旧库存**',
-      '# 每周回顾 · 15 条\n\n## example-project',
+      '# 每周回顾 · 15 条\n\n## sample-app',
       '# 回访 · 5 条\n\n1. **登录提示**',
       '# 回访校准 · 5 条\n\n1. **登录提示**',
       '# 开放循环审计\n\n- 弱证据 4',

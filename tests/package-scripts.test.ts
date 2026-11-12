@@ -4,6 +4,7 @@ import * as fs from 'node:fs';
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8')) as {
   name: string;
   main?: string;
+  exports?: Record<string, string>;
   bin?: Record<string, string>;
   files?: string[];
   scripts: Record<string, string>;
@@ -14,8 +15,10 @@ const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8')) as {
 describe('package entrypoints', () => {
   it('publishes the LoopSteward package and CLI entrypoint', () => {
     expect(pkg.name).toBe('loopsteward');
-    expect(pkg.main).toBe('dist/src/loops/cli.js');
+    expect(pkg.main).toBe('dist/src/loops/index.js');
+    expect(pkg.exports?.['.']).toBe('./dist/src/loops/index.js');
     expect(pkg.bin?.loopsteward).toBe('dist/src/loops/cli.js');
+    expect(pkg.bin?.['loopsteward-mcp']).toBe('dist/src/mcp/server.js');
   });
 
   it('points dev and start at Open Loops, keeping legacy service explicit', () => {
@@ -40,7 +43,14 @@ describe('package entrypoints', () => {
   });
 
   it('ships only runtime assets and rebuilds before packing', () => {
-    expect(pkg.files).toEqual(['dist', 'skills', 'scripts', 'docs/MCP.md', 'README.md']);
+    expect(pkg.files).toEqual([
+      'dist',
+      'skills',
+      'scripts',
+      'docs/MCP.md',
+      'docs/RELEASE_PROCESS.md',
+      'README.md',
+    ]);
     expect(pkg.scripts.clean).toContain("rmSync('dist'");
     expect(pkg.scripts.prepack).toBe('npm run clean && npm run build:open-loops');
     expect(pkg.scripts['verify:package']).toBe('node scripts/verify-package.mjs');

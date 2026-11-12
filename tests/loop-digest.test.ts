@@ -577,7 +577,7 @@ describe('buildDigest', () => {
     }
     const sessions = [
       'Hermes · 微信接入',
-      'Qoder · Magpie 复盘',
+      'Qoder · 模型网关复盘',
       'ZCode · 网关定位',
       'DSH · 会话解析',
       'Codex · 排版排查',

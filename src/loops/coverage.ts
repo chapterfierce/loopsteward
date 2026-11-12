@@ -232,7 +232,7 @@ export function readMagpieSessionIndex(
     return {
       entries: [],
       rawEntries: 0,
-      errors: [`Magpie 会话索引不存在：${indexPath}`],
+      errors: [`会话索引不存在：${indexPath}`],
     };
   }
 
@@ -243,7 +243,7 @@ export function readMagpieSessionIndex(
     return {
       entries: [],
       rawEntries: 0,
-      errors: [`Magpie 会话索引无法解析：${(error as Error).message}`],
+      errors: [`会话索引无法解析：${(error as Error).message}`],
     };
   }
 
@@ -253,7 +253,7 @@ export function readMagpieSessionIndex(
     return {
       entries: [],
       rawEntries: 0,
-      errors: [`Magpie 会话索引格式不正确：${indexPath}`],
+      errors: [`会话索引格式不正确：${indexPath}`],
     };
   }
 
@@ -375,7 +375,7 @@ function buildAgentRows(
       comparable,
       ignoredByPolicy,
       ...(agent === 'hermes'
-        ? { note: '本地只取 Hermes 顶层用户会话；Magpie 索引还包含 cron/subagent' }
+        ? { note: '本地只取 Hermes 顶层用户会话；会话索引还包含 cron/subagent' }
         : {}),
     });
   }
@@ -458,7 +458,7 @@ export function formatCoverageReport(result: CoverageResult): string {
   const lines = [
     `# 会话覆盖 · 最近 ${result.windowDays} 天`,
     '',
-    `Magpie 索引 ${result.magpieEntries} 条记录 / ${result.magpieSessions} 个会话；本地读到 ${result.localSessions} 个。`,
+    `会话索引 ${result.magpieEntries} 条记录 / ${result.magpieSessions} 个会话；本地读到 ${result.localSessions} 个。`,
   ];
 
   if (result.agents.length > 0) {
@@ -470,7 +470,7 @@ export function formatCoverageReport(result: CoverageResult): string {
         ? `漏读 ${row.missingLocal} / 本地独有 ${row.localOnly}${policy}`
         : `策略过滤 ${row.ignoredByPolicy}`;
       lines.push(
-        `- **${row.agent}** · Magpie ${row.magpieSessions} / 本地 ${row.localSessions} / 匹配 ${row.matched} · ${suffix}`,
+        `- **${row.agent}** · 索引 ${row.magpieSessions} / 本地 ${row.localSessions} / 匹配 ${row.matched} · ${suffix}`,
       );
       if (row.note) lines.push(`  ${row.note}`);
     }

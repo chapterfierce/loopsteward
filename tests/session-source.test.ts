@@ -597,12 +597,12 @@ describe('discoverRecentSessions', () => {
     expect(displayProjectName('Alice', {
       agent: 'hermes',
       sessionId: 'hermes-s2',
-      title: '排查 Magpie 路由错误',
+      title: '排查模型网关路由错误',
       projectDir: 'C:\\Users\\Alice',
       lastActive: '2026-11-10T11:00:00.000Z',
       messages: [],
       sourceFile: 'hermes-s2',
-    }, 'C:\\Users\\Alice')).toBe('Hermes · 排查 Magpie 路由错误');
+    }, 'C:\\Users\\Alice')).toBe('Hermes · 排查模型网关路由错误');
   });
 
   it('labels DSH sessions running in the home directory by title', () => {
@@ -716,12 +716,12 @@ describe('discoverRecentSessions', () => {
     expect(displayProjectName('draft-5a70f268-cadf-4929-bc47-0cc1710db469', {
       agent: 'zcode',
       sessionId: 'zcode-s8',
-      title: 'Claude Code 配置修改与 Magpie 代理网关兼容性',
+      title: 'Claude Code 配置修改与模型网关兼容性',
       projectDir: 'C:\\Users\\Alice\\.zcode\\workspace\\draft-5a70f268-cadf-4929-bc47-0cc1710db469',
       lastActive: '2026-11-10T11:00:00.000Z',
       messages: [],
       sourceFile: 'zcode-s8',
-    })).toBe('ZCode · Claude Code 配置修改与 Magpie 代理网关兼容性');
+    })).toBe('ZCode · Claude Code 配置修改与模型网关兼容性');
   });
 
   it('labels a Claude session that runs inside a scratch workspace by its directory', () => {

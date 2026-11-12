@@ -467,7 +467,7 @@ describe('loop doctor', () => {
 
     installSessionPolicy({
       homeDir: home,
-      scriptPath: path.join(process.cwd(), 'scripts', 'open-loops.ps1'),
+      scriptPath: path.join(process.cwd(), 'scripts', 'open-loops.mjs'),
     });
     const after = buildLoopDoctor(common);
     expect(check(after, 'session-policy')).toMatchObject({

@@ -94,7 +94,20 @@ function mcpTargets(options: McpInstallOptions): McpTarget[] {
     },
   ];
   const requested = options.clients;
-  if (!requested) return all;
+  if (!requested) {
+    return all.filter((target) => {
+      if (fs.existsSync(target.file)) return true;
+      if (target.client === 'codex') {
+        return fs.existsSync(path.join(home, '.codex'));
+      }
+      if (target.client === 'cursor') {
+        return fs.existsSync(path.join(home, '.cursor'));
+      }
+      return fs.existsSync(path.join(project, '.mcp.json'))
+        || fs.existsSync(path.join(project, '.claude'))
+        || fs.existsSync(path.join(home, '.claude.json'));
+    });
+  }
   const unique = [...new Set(requested)];
   const unknown = unique.filter((client) => !MCP_CLIENTS.includes(client));
   if (unknown.length > 0) throw new Error(`unknown mcp client: ${unknown.join(', ')}`);

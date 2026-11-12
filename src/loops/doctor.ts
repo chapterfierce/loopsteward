@@ -91,7 +91,7 @@ function fileHash(filePath: string): string {
 
 function skillWrapperPaths(content: string): string[] {
   const matches = content.matchAll(
-    /["']([A-Za-z]:[\\/][^"'\r\n]*[\\/]scripts[\\/](?:open-loops|refresh-open-loops)\.ps1)["']/g,
+    /["']((?:[A-Za-z]:[\\/]|\/)[^"'\r\n]*[\\/]scripts[\\/](?:open-loops|refresh-open-loops)\.(?:ps1|mjs))["']/g,
   );
   return [...new Set(Array.from(matches, (match) => match[1]))];
 }
@@ -589,13 +589,11 @@ function inspectSkills(
         problems.push(`${target.agent}: 不一致`);
         continue;
       }
-      if (process.platform === 'win32') {
-        const installed = fs.readFileSync(target.target, 'utf8');
-        const missingWrappers = skillWrapperPaths(installed)
-          .filter((wrapper) => !fs.existsSync(wrapper));
-        if (missingWrappers.length > 0) {
-          problems.push(`${target.agent}: wrapper 不存在`);
-        }
+      const installed = fs.readFileSync(target.target, 'utf8');
+      const missingWrappers = skillWrapperPaths(installed)
+        .filter((wrapper) => !fs.existsSync(wrapper));
+      if (missingWrappers.length > 0) {
+        problems.push(`${target.agent}: wrapper 不存在`);
       }
     } catch (error) {
       problems.push(`${target.agent}: 读取失败`);
@@ -931,7 +929,7 @@ export function buildLoopDoctor(options: LoopDoctorOptions = {}): LoopDoctorRepo
   if (options.sessionPolicy !== false) {
     checks.push(
       inspectPolicy(
-        path.resolve(options.scriptPath ?? path.join(packageRoot, 'scripts', 'open-loops.ps1')),
+        path.resolve(options.scriptPath ?? path.join(packageRoot, 'scripts', 'open-loops.mjs')),
         options.home,
         options.localAppData,
         options.policyAgents,
