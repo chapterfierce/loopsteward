@@ -1,5 +1,16 @@
 # Changelog
 
+## [3.0.0](https://github.com/chapterfierce/loopsteward/compare/v2.9.2...v3.0.0) (2026-11-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* extraction now requires LOOPSTEWARD_BASE_URL and LOOPSTEWARD_MODEL (MAGPIE_* remain aliases), and setup/install commands default to detected agents instead of a hard-coded Hermes target.
+
+### Features
+
+* prepare LoopSteward 3.0.0 for public npm use ([e8107eb](https://github.com/chapterfierce/loopsteward/commit/e8107ebe2fbd5a7d3eafc212d0e39a207059511c))
+
 ## [2.9.2](https://github.com/chapterfierce/loopsteward/compare/v2.9.1...v2.9.2) (2026-11-12)
 
 
