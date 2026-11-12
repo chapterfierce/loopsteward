@@ -1,6 +1,6 @@
 # 发布检查
 
-当前版本：`2.9.1`。日常发布走 GitHub Actions，不再保存 npm token。
+当前版本：`2.9.2`。日常发布走 GitHub Actions，不再保存 npm token。
 
 ## 自动发布
 
@@ -53,6 +53,15 @@ npm logout --registry=https://registry.npmjs.org
 - 超过 72 小时：`npm deprecate loopsteward@X.Y.Z "原因" --registry=https://registry.npmjs.org`，再发补丁版本。
 
 ## 发布记录
+
+### 2.9.2（2026-11-12）
+
+- 合并版本 PR #1 后由 `Release` 工作流自动发布，无需手动登录 npm。
+- npm 版本：`loopsteward@2.9.2`，`latest` 已指向该版本。
+- 标签：`v2.9.2`，指向 `e9cdb62`。
+- GitHub release：https://github.com/chapterfierce/loopsteward/releases/tag/v2.9.2
+- provenance：`dist.attestations` 返回 SLSA v1；publish 日志含 `Signed provenance statement` 与 sigstore 透明日志链接。
+- 发布后临时目录安装 `loopsteward@2.9.2` 并运行 `npx loopsteward --help`，入口正常。
 
 ### 2.9.1（2026-11-12）
 
