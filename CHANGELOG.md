@@ -5,11 +5,18 @@
 
 ### ⚠ BREAKING CHANGES
 
-* extraction now requires LOOPSTEWARD_BASE_URL and LOOPSTEWARD_MODEL (MAGPIE_* remain aliases), and setup/install commands default to detected agents instead of a hard-coded Hermes target.
+* Extraction now requires `LOOPSTEWARD_BASE_URL` and `LOOPSTEWARD_MODEL`; the `MAGPIE_*` names remain aliases. `setup`, `install-skill`, `install-policy`, `install-mcp`, and `doctor` now default to detected agents instead of a hard-coded Hermes target.
+* The Git history was rewritten for the first clean public release. Provenance links for 2.9.x no longer resolve, and npm `2.9.x` is deprecated in favor of `3.0.0`.
 
 ### Features
 
-* prepare LoopSteward 3.0.0 for public npm use ([7578c24](https://github.com/chapterfierce/loopsteward/commit/7578c24fcb5e3290a58e986aee59584e1c08e064))
+* First public release: the repository and npm package are assembled from a reviewed public file set; development notes, design drafts, and internal release documents are no longer part of the history.
+* Generic LLM configuration: any OpenAI-compatible `/chat/completions` endpoint works, and Magpie is an optional integration rather than a requirement.
+* Agent detection across Codex, Claude Code, Cursor, and Hermes; an empty home directory no longer fails or creates dead install targets.
+* Cross-platform skill wrapper (`node scripts/open-loops.mjs`) and a dedicated `loopsteward-mcp` binary.
+* `verify:package` now covers empty-home setup, skill installation, a real ingest run, and import side effects.
+* Session content is redacted before it is sent to the model.
+* README rewritten as npm user documentation; importing the package no longer runs the CLI.
 
 ## [2.9.2](https://github.com/chapterfierce/loopsteward/compare/v2.9.1...v2.9.2) (2026-11-12)
 
