@@ -64,6 +64,10 @@ function buildMap(projects: Record<string, MagpieProject>): ProjectMap {
         pathKey(entry.dir) === key || entry.roots.some((root) => pathKey(root) === key));
       if (exact) return { dir: exact.dir, name: exact.name };
 
+      if (!path.isAbsolute(normalized)) {
+        return { dir: normalized, name: path.basename(normalized) || 'unknown' };
+      }
+
       let current = normalized;
       for (let depth = 0; depth < 20; depth += 1) {
         if (fs.existsSync(path.join(current, '.git'))) {

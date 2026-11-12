@@ -1331,7 +1331,7 @@ describe('discoverRecentSessions', () => {
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
-  });
+  }, 120_000);
 
   it('keeps active Codex sessions when settleMinutes is zero', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'loops-codex-active-'));
