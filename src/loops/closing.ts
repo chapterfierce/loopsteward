@@ -7,6 +7,7 @@ const MAX_LIMIT = 20;
 
 export interface ClosingItem {
   id: string;
+  ref: string;
   title: string;
   status: LoopStatus;
   confidence: number;
@@ -56,6 +57,7 @@ export function buildClosingReview(options: ClosingOptions): ClosingReview {
     if (!presentation) continue;
     items.push({
       id: loop.id,
+      ref: loopRef(loop.id),
       title: loop.title,
       status: loop.status,
       confidence: loop.confidence,
@@ -103,7 +105,7 @@ export function formatClosingReview(review: ClosingReview): string {
     const confidence = Math.round(item.confidence * 100);
     lines.push(
       '',
-      `${index + 1}. **${item.title}** · ${item.projectName} · 展示 ${item.presentationCount} 次 · 最近 ${shortDate(item.lastPresentedAt)} · ${confidence}% · [ref ${loopRef(item.id)}]`,
+      `${index + 1}. **${item.title}** · ${item.projectName} · 展示 ${item.presentationCount} 次 · 最近 ${shortDate(item.lastPresentedAt)} · ${confidence}% · [ref ${item.ref}]`,
       `   下一步：${item.nextAction}`,
     );
   }
