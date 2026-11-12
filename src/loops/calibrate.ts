@@ -56,7 +56,7 @@ export function buildCalibration(options: CalibrationOptions = {}): CalibrationR
 
   try {
     const latestFeedback = new Set(store.getLatestFeedback().map((feedback) => feedback.loopId));
-    const candidates = store.listActiveLoops()
+    const candidates = store.listActiveLoops(undefined, now)
       .filter((loop) => loop.status !== 'snoozed' && !isSnoozed(loop, nowMs))
       .filter((loop) => !latestFeedback.has(loop.id))
       .sort((left, right) => {
