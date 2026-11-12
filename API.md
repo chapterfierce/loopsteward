@@ -2,7 +2,7 @@
 
 **Version:** 2.5.0  
 **Base URL:** `http://localhost:3000`  
-**Last Updated:** 2026-08-01
+**Last Updated:** 2026-11-10
 
 ---
 
@@ -17,13 +17,28 @@ Claw Task Service is an intent classification and task management HTTP API. It p
 
 ---
 
+## MCP Server (read-only)
+
+Open Loops phase 1 adds a stdio MCP server. It is separate from the legacy HTTP API and exposes only read-only tools:
+
+| Tool | Description |
+|------|-------------|
+| `loops_context` | Return up to 3 unfinished loops for one project directory |
+| `loops_search` | Search loops by text, status, project, and limit |
+| `loops_get` | Return one loop and its source message excerpts by stable ref |
+
+Start it with `npm run build && node dist/src/mcp/server.js --db data/loops.db`. Install client configuration with `npm run loops:install-mcp -- --json`. Full protocol and configuration details are in [`docs/MCP.md`](docs/MCP.md).
+
+---
+
 ## Table of Contents
 
 1. [Health & Monitoring](#health--monitoring)
 2. [Intent Classification API](#intent-classification-api)
 3. [Task Manager API](#task-manager-api)
-4. [Error Responses](#error-responses)
-5. [Examples](#examples)
+4. [Webhook API](#webhook-api)
+5. [Error Responses](#error-responses)
+6. [Examples](#examples)
 
 ---
 
@@ -360,6 +375,13 @@ Query tasks with optional filters.
 | `category` | string | Filter by category |
 | `assignee` | string | Filter by assignee ID |
 | `archived` | boolean | Include archived tasks (`true`/`false`) |
+| `page` | number | Page number (1-based); enables paginated response |
+| `pageSize` | number | Items per page (default 20, max 500) |
+| `sortBy` | string | `createdAt`, `updatedAt`, `priority`, `status` |
+| `sortOrder` | string | `asc` or `desc` |
+| `createdAfter` / `createdBefore` | ISO 8601 | Creation-time range |
+| `updatedAfter` / `updatedBefore` | ISO 8601 | Update-time range |
+| `intentCategory` | string | Filter by originating intent category |
 
 **Response:**
 
@@ -519,6 +541,43 @@ Get the lifecycle audit trail for a task.
 
 ---
 
+## Webhook API
+
+Register external URLs to receive task lifecycle events. Deliveries are signed with
+`X-Claw-Signature: sha256=<hmac>` when a secret is configured, and retried with
+exponential backoff (3 attempts).
+
+### Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/v1/webhooks` | Register a webhook (`url`, `events`, `secret?`, `metadata?`) |
+| `GET` | `/api/v1/webhooks` | List registered webhooks (secrets omitted) |
+| `GET` | `/api/v1/webhooks/:id` | Get one webhook |
+| `PATCH` | `/api/v1/webhooks/:id` | Update URL/events/secret/metadata/enabled |
+| `DELETE` | `/api/v1/webhooks/:id` | Delete a webhook |
+| `GET` | `/api/v1/webhooks/:id/deliveries` | Delivery history (`limit` default 20, max 100) |
+
+### Events
+
+`task.created`, `task.status_changed`, `task.deleted`,
+`task.lifecycle.invalid_transition`.
+
+### Example
+
+```http
+POST /api/v1/webhooks
+Content-Type: application/json
+
+{
+  "url": "https://notify.example.com/hook",
+  "events": ["task.created", "task.status_changed"],
+  "secret": "<hmac-secret>"
+}
+```
+
+---
+
 ## Error Responses
 
 All error responses follow this format:
@@ -587,6 +646,8 @@ curl http://localhost:3000/metrics
 | `PORT` | `3000` | Server listen port |
 | `LOG_LEVEL` | `INFO` | Log level: `DEBUG`, `INFO`, `WARN`, `ERROR` |
 | `NODE_ENV` | `development` | Environment: `development`, `production` |
+| `TASK_STORE` | `sqlite` in production, `memory` otherwise | Task storage backend: `sqlite` or `memory` |
+| `TASK_DB_PATH` | `./data/tasks.db` | SQLite database path (used when `TASK_STORE=sqlite`) |
 
 ---
 
