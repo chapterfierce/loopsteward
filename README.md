@@ -2,10 +2,12 @@
 
 > Open Loops tracker for parallel AI sessions
 
+[![CI](https://github.com/chapterfierce/loopsteward/actions/workflows/ci.yml/badge.svg)](https://github.com/chapterfierce/loopsteward/actions/workflows/ci.yml)
+
 LoopSteward（守环）是并行 AI 会话的开放循环追踪器。它从 Codex、Claude Code、Claude Desktop（Code/Cowork）、Qoder、ZCode、WorkBuddy、Hermes、DeepSeek Harness（DSH）、Antigravity（CLI）的最近会话尾部提取未闭环事项，落到本机 SQLite，通过 skill 在之后的工作会话里回访，并用独立核对命令关闭已经完成的事项。
 
 **Version:** 2.9.0
-**Status:** Open Loops M1–M152 + MCP phase 1 (read-only) complete; package and global-install path verified; legacy HTTP task service deprecated
+**Status:** Open Loops M1–M153 + MCP phase 1 (read-only) complete; package and global-install path verified; legacy HTTP task service deprecated
 
 ---
 
