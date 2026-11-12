@@ -1,7 +1,9 @@
 # API Reference — Claw Task Service
 
-**Version:** 2.5.0 (Phase 3 M1–M6)  
-**Last Updated:** 2026-07-30
+**Version:** 2.5.0 (Phase 3 M1–M11)
+**Last Updated:** 2026-11-10
+
+This document covers the in-process TypeScript APIs. The HTTP API is documented in [`../API.md`](../API.md).
 
 ---
 
