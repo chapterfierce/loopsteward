@@ -434,7 +434,8 @@ export function buildDigest(options: DigestOptions = {}): DigestResult {
     );
     const activeLoops = store.listActiveLoops();
     const presentedLoops = store.getPresentationStats(now.toISOString());
-    const closingTotal = activeLoops.filter((loop) => presentedLoops.has(loop.id)).length;
+    const closingTotal = activeLoops.filter((loop) =>
+      (loop.status === 'open' || loop.status === 'pending') && presentedLoops.has(loop.id)).length;
     const latestFeedback = new Map(
       store.getLatestFeedback().map((feedback) => [feedback.loopId, feedback]),
     );
@@ -478,7 +479,9 @@ export function buildDigest(options: DigestOptions = {}): DigestResult {
       : 0;
     const focusClosingTotal = focusKey !== undefined
       ? activeLoops.filter((loop) =>
-        pathKey(loop.projectDir) === focusKey && presentedLoops.has(loop.id)).length
+        (loop.status === 'open' || loop.status === 'pending')
+        && pathKey(loop.projectDir) === focusKey
+        && presentedLoops.has(loop.id)).length
       : undefined;
     const coolingCandidates = actionableLoops.filter((loop) =>
       !isSnoozed(loop, nowMs)
