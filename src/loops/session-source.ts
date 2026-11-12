@@ -72,6 +72,10 @@ function normalizeDir(value: string): string {
   return path.normalize(value.trim());
 }
 
+function isAbsoluteDir(value: string): boolean {
+  return path.isAbsolute(value) || /^[A-Za-z]:[\\/]/.test(value) || value.startsWith('\\\\');
+}
+
 function messageId(fallback: string, value: unknown): string {
   return typeof value === 'string' && value.length > 0 ? value : fallback;
 }
@@ -423,10 +427,10 @@ function readClaudeSession(
 
 function usableCoworkProjectDir(value: string, home: string): string | null {
   const candidate = normalizeDir(value);
-  if (!path.isAbsolute(candidate)) return null;
+  if (!isAbsoluteDir(candidate)) return null;
   if (candidate === path.parse(candidate).root) return null;
   if (candidate === normalizeDir(home)) return null;
-  if (candidate.includes(`${path.sep}local-agent-mode-sessions${path.sep}`)) return null;
+  if (/[\\/]local-agent-mode-sessions[\\/]/.test(candidate)) return null;
   return candidate;
 }
 

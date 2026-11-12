@@ -26,6 +26,12 @@ function pathKey(value: string): string {
   return normalizePath(value).replace(/\\/g, '/').toLowerCase();
 }
 
+function baseName(value: string): string {
+  const trimmed = value.trim().replace(/[\\/]+$/, '');
+  const index = Math.max(trimmed.lastIndexOf('/'), trimmed.lastIndexOf('\\'));
+  return trimmed.slice(index + 1) || 'unknown';
+}
+
 function canonicalFromProject(project: MagpieProject): string {
   if (project.key.startsWith('dir:')) return project.key.slice(4);
   return project.roots?.[0] ?? project.key;
@@ -38,7 +44,7 @@ function buildMap(projects: Record<string, MagpieProject>): ProjectMap {
     const roots = [...new Set([dir, ...(project.roots ?? []).map(normalizePath)])];
     entries.push({
       dir,
-      name: project.name || path.basename(dir),
+      name: project.name || baseName(dir),
       roots,
     });
   }
@@ -57,7 +63,7 @@ function buildMap(projects: Record<string, MagpieProject>): ProjectMap {
           candidate.roots.some((root) => pathKey(root) === rootKey));
         if (entry) return { dir: entry.dir, name: entry.name };
         const root = normalizePath(worktree[1]);
-        return { dir: root, name: path.basename(root) || 'unknown' };
+        return { dir: root, name: baseName(root) };
       }
 
       const exact = entries.find((entry) =>
@@ -65,13 +71,13 @@ function buildMap(projects: Record<string, MagpieProject>): ProjectMap {
       if (exact) return { dir: exact.dir, name: exact.name };
 
       if (!path.isAbsolute(normalized)) {
-        return { dir: normalized, name: path.basename(normalized) || 'unknown' };
+        return { dir: normalized, name: baseName(normalized) };
       }
 
       let current = normalized;
       for (let depth = 0; depth < 20; depth += 1) {
         if (fs.existsSync(path.join(current, '.git'))) {
-          return { dir: current, name: path.basename(current) || 'unknown' };
+          return { dir: current, name: baseName(current) };
         }
         const parent = path.dirname(current);
         if (parent === current) break;
@@ -86,7 +92,7 @@ function buildMap(projects: Record<string, MagpieProject>): ProjectMap {
           }
         }
       }
-      return { dir: normalized, name: path.basename(normalized) || 'unknown' };
+      return { dir: normalized, name: baseName(normalized) };
     },
   };
 }

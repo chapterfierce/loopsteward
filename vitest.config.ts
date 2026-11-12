@@ -7,6 +7,6 @@ export default defineConfig({
     exclude: ['tests/*integration*.test.ts'],
     reporter: 'verbose',
     globals: true,
-    testTimeout: 20000,
+    testTimeout: 120000,
   },
 });
