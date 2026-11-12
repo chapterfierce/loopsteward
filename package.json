@@ -1,6 +1,6 @@
 {
   "name": "loopsteward",
-  "version": "2.9.1",
+  "version": "2.9.2",
   "description": "Open Loops tracker for parallel AI sessions",
   "type": "module",
   "license": "MIT",

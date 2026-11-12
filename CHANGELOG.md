@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.9.2](https://github.com/chapterfierce/loopsteward/compare/v2.9.1...v2.9.2) (2026-11-12)
+
+
+### Bug Fixes
+
+* **calibrate:** honor injected clock when filtering snoozed loops ([e3e5ebf](https://github.com/chapterfierce/loopsteward/commit/e3e5ebf91ecb8ecef71d5f55c1c053f9c279c8eb))
+
 ## 2.9.1
 
 - Added `npm run release:check`, one gate that runs type-check, the full test suite, build, package verification, and the legacy suite in order; `docs/RELEASE.md` records publish, post-publish token revocation, tagging, and rollback steps.
