@@ -1,6 +1,6 @@
 {
   "name": "loopsteward",
-  "version": "2.9.2",
+  "version": "3.0.0",
   "description": "Open Loops tracker for parallel AI sessions",
   "author": "LoopSteward contributors",
   "type": "module",
