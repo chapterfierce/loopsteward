@@ -17,6 +17,7 @@ import type {
   LoopOrigin,
   LoopPresentation,
   LoopPresentationKind,
+  LoopPresentationStats,
   LoopRecord,
   LoopSignal,
   LoopStatus,
@@ -1389,6 +1390,33 @@ export class LoopStore {
       }
     }
     return first;
+  }
+
+  getPresentationStats(untilIso?: string): Map<string, LoopPresentationStats> {
+    const where = untilIso
+      ? 'WHERE julianday(p.presented_at) <= julianday(?)'
+      : '';
+    const params = untilIso ? [normalizeIso(untilIso)] : [];
+    const rows = this.db.prepare(`
+      SELECT j.value AS loop_id,
+        COUNT(*) AS count,
+        MIN(p.presented_at) AS first_at,
+        MAX(p.presented_at) AS last_at
+      FROM loop_presentations p, json_each(p.loop_ids) j
+      ${where}
+      GROUP BY j.value
+    `).all(...params) as Array<{
+      loop_id: string;
+      count: number;
+      first_at: string;
+      last_at: string;
+    }>;
+    return new Map(rows.map((row) => [row.loop_id, {
+      loopId: row.loop_id,
+      count: Number(row.count),
+      firstPresentedAt: String(row.first_at),
+      lastPresentedAt: String(row.last_at),
+    }]));
   }
 
   countPresentationsAfter(iso: string): number {

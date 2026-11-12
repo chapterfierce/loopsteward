@@ -14,6 +14,7 @@ import {
 } from './audit.js';
 import { buildProjectOverview, formatProjectOverview } from './projects.js';
 import { buildLoopDetail, formatLoopDetail } from './detail.js';
+import { buildClosingReview, formatClosingReview } from './closing.js';
 import {
   isNoiseSuppressed,
   recordLoopFeedback,
@@ -79,6 +80,7 @@ function usage(): string {
     '  loopsteward install-mcp [--agents codex,claude,cursor] [--project-dir <dir>] [--dry-run] [--uninstall] [--json]',
     '  loopsteward setup [--agents codex,claude,qoder,workbuddy,hermes,antigravity] [--schedule] [--ingest] [--import-db <path>] [--dry-run] [--json]',
     '  loopsteward calibrate [--limit 5] [--db <path>] [--json]',
+    '  loopsteward closing [--limit 10] [--db <path>] [--json]',
   ].join('\n');
 }
 
@@ -277,6 +279,24 @@ function runCalibrate(flags: Map<string, string | true>): number {
     console.log(formatCalibration(result));
   }
   return 0;
+}
+
+function runClosing(flags: Map<string, string | true>): number {
+  const store = new LoopStore(flagString(flags, '--db') ?? resolveDefaultDbPath());
+  try {
+    const review = buildClosingReview({
+      store,
+      limit: flagNumber(flags, '--limit'),
+    });
+    if (flags.has('--json')) {
+      console.log(JSON.stringify(review, null, 2));
+    } else {
+      console.log(formatClosingReview(review));
+    }
+    return 0;
+  } finally {
+    store.close();
+  }
 }
 
 async function runReconcile(flags: Map<string, string | true>): Promise<number> {
@@ -1075,6 +1095,7 @@ async function main(argv: string[]): Promise<number> {
   if (command === 'pending') return runPending(flags);
   if (command === 'digest') return runDigest(flags);
   if (command === 'calibrate') return runCalibrate(flags);
+  if (command === 'closing') return runClosing(flags);
   if (command === 'reconcile') return runReconcile(flags);
   if (command === 'stats') return runStats(flags);
   if (command === 'doctor') return runDoctor(flags);

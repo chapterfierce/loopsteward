@@ -9,7 +9,8 @@ description: >-
   recent Agent sessions were fully discovered and whether the local install is
   healthy. When the user picks an item and says to do it, fetches that loop and
   carries out its next action, then asks before closing. Never runs extraction
-  inside the chat.
+  inside the chat. Also runs a closing review for items already shown but never
+  closed.
 ---
 
 # Open Loops
@@ -70,6 +71,25 @@ The weekly review may start with a separate confirmed-forgotten block. These ite
 - Treat each row as a normal loop: the user can act on it, snooze it, or close it with the usual ref flow.
 - Do not count these rows again in the "items remaining" footer.
 - Do not move them back into the regular review list or repeat them in another section.
+
+## Closing review
+
+When the user asks what has been shown but never closed, or says "closing review" / "clean up what you already showed me", run exactly:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "C:\loopsteward\scripts\open-loops.ps1" closing --limit 10 --json
+```
+
+- Use `total` and `shown`. Show at most 10 rows in the returned order; do not re-rank.
+- Each row has title, project, presentation count, last shown date, confidence, and ref.
+- Ask one question for each: done, later, or drop. Do not infer a verdict from the repeat count.
+- Apply only explicit answers, one batch per verdict:
+  - done: `update --refs <codes> --status resolved --note "user confirmed done in closing review"`
+  - later: `update --refs <codes> --status snoozed --snooze-hours 24`
+  - drop: `update --refs <codes> --status dropped --note "user dropped in closing review"`
+- Never close or drop on silence. A high presentation count means "shown often", not "done".
+- If `total > shown`, say how many are left and offer "continue closing" for the next batch.
+- This command is read-only; it does not mark presentations or change loop state.
 
 ## One project's backlog
 
