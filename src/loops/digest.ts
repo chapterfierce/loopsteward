@@ -432,7 +432,7 @@ export function buildDigest(options: DigestOptions = {}): DigestResult {
     const activities = new Map(
       store.listProjectActivity(undefined, 300).map((item) => [item.projectDir, item]),
     );
-    const activeLoops = store.listActiveLoops();
+    const activeLoops = store.listActiveLoops(undefined, now);
     const presentedLoops = store.getPresentationStats(now.toISOString());
     const closingTotal = activeLoops.filter((loop) =>
       (loop.status === 'open' || loop.status === 'pending') && presentedLoops.has(loop.id)).length;
